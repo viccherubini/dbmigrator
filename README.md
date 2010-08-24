@@ -4,12 +4,7 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 # Setup
 1. Clone this repository into your PHP `include_path`.
 2. Copy DbMigrator.Config.Template.php to DbMigrator.Config.php in the DbMigrator directory. This step is only required if you do not have project specific DbMigrator.Config.php files.
-3. Link the `dbmigrator` script to your /usr/local/bin path.
-
-`cd /usr/local/bin && ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator`
-
-After doing this, you'll be able to execute `dbmigrator` from any directory because it's in your $PATH.
-
+3. Link the `dbmigrator` script to your /usr/local/bin path: `cd /usr/local/bin && ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator`
 4. Navigate to the root directory of your project. `cd ~/Projects/My-Project`
 5. Create a directory named __build__ with a subdirectory named __db__. `mkdir build/db -p` The directory __build__ will contain your project specific DbMigrator.Config.php file and __db__ will contain all of your build scripts.
 6. Copy DbMigrator.Config.Template.php from where you cloned the repository to the local __build__ directory as DbMigrator.Config.php. `cp /usr/share/php/DbMigrator/DbMigrator.Config.Template.php DbMigrator.Config.php`
