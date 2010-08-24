@@ -27,7 +27,7 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 	
 8. You're all set up now!
 
-# Usage
+# Migration Script Creation
 Using DbMigrator is very simple. Generally, you'll execute everything from the `dbmigrator` command line program within your project directory. By doing so, it will automatically look in `./build/db/` for DbMigrator.Config.php to get local configuration information. If it can not be found there, `dbmigrator` will look for the DbMigrator.Config.php file in the PHP `include_path` in __DbMigrator__.
 
 The `dbmigrator` program has two options: _create_ and _update_.
@@ -38,6 +38,8 @@ You must create at least one script, but can create multiple scripts in one comm
 
 	dbmigrator create create-table-users
 	dbmigrator create create-table-users create-table-products insert-default-data
+
+The second command will create three empty migration scripts.
 
 The _create_ method also has a few other niceties. If you create a script with the prefix __create-table__ followed by a table name, the __tearDown__ method will automatically have the code to drop that table. Thus calling:
 
@@ -53,3 +55,25 @@ You can use either dashes or underscores in the table name as well. Calling the 
 	dbmigrator create create-table-users_to_products
 
 This also works if you create a script with the prefix __create-database__.
+
+Finally, you do not need to worry about prefixing your scripts with the latest version. DbMigrator will handle that for you. If you run
+
+	dbmigrator create 1-create-table-users
+	
+You'll end up with a script named 1-1-create-table-users-<hash>.php (if it were the first script, for example).
+
+# Database Migration Usage
+Now that you can easily create new migration scripts, it's time to actually migrate! DbMigrator works similar to a linear delineated timeline version control system (like Subversion). Each new migration script is a new numerical version in the timeline. This makes it easy to update or rollback to any version.
+
+DbMigrator is smart enough to determine if you're updating to a new version or rolling back to a previous version. Thus, if your database is currently at version 52, and you have migration scripts on disk numbering to version 73, calling:
+
+	dbmigrate update 70
+
+will update the database to version 70. Calling
+
+	dbmigrate update 23
+
+will rollback the database to version 23. Finally, calling _update_ with no arguments updates to the HEAD (or latest) version:
+
+	dbmigrate update
+
