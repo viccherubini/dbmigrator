@@ -62,10 +62,8 @@ class DbMigrator {
 		$migrationsOnDisk = $this->buildMigrationsOnDisk();
 		
 		$version = 0;
-		foreach ( $migrationsOnDisk as $migrationFile ) {
-			if ( preg_match('/^(\d+).*/i', $migrationFile, $match) ) {
-				$version = intval($match[1]);
-			}
+		foreach ( $migrationsOnDisk as $migration ) {
+			$version = $migration['version'];
 		}
 		
 		$version++;
@@ -141,6 +139,9 @@ class DbMigrator {
 				return ( $m['version'] > $version && $m['version'] <= $currentVersion );
 			});
 			
+			// Need to execute the scripts in reverse order
+			krsort($migrationScriptList);
+			
 			$migrationMethod = $this->tearDownMethod;
 		} elseif ( $version > $currentVersion ) {
 			$this->message("UPDATING TO VERSION {$version}");
@@ -151,7 +152,7 @@ class DbMigrator {
 			
 			$migrationMethod = $this->setUpMethod;
 		} elseif ( $version == $currentVersion ) {
-			$this->message("You can not update or rollback to the current version.");
+			$this->message("You are already at the latest version of the database.");
 			return false;
 		}
 		
@@ -163,40 +164,54 @@ class DbMigrator {
 			$migrationFile = $migration['script'];
 			$migrationFilePath = $migrationPath . $migrationFile;
 			
+			$query = NULL;
 			if ( is_file($migrationFilePath) ) {
 				require_once $migrationFilePath;
 				
 				if ( is_object($__migrationObject) && method_exists($__migrationObject, $migrationMethod) ) {
 					$migrationClass = get_class($__migrationObject);
 					$query = $__migrationObject->$migrationMethod();
-					
-					$executed = false;
-					if ( !empty($query) ) {
-						$executed = $pdo->exec($query);
-					}
-					
-					if ( false === $executed ) {
-						$errorInfo = $pdo->errorInfo();
-						
-						$this->error("##################################################");
-						$this->error("FAILED TO EXECUTE: {$migrationFile}");
-						$this->error("ERROR: {$errorInfo[2]}");
-						$this->error("##################################################");
-						
-						$error = true;
-						break;
-					} else {
-						$this->success(sprintf("%01.3fs - %-10s", $execTime, $migrationFile));
-					}
-					
-					if ( $migration['change_id'] > 0 ) {
-						$pdo->prepare("DELETE FROM {$this->changeLogTable} WHERE change_id = ?")
-							->execute(array($migration['change_id']));
-					} else {
-						$pdo->prepare("INSERT INTO {$this->changeLogTable} VALUES(NULL, NOW(), ?, ?)")
-							->execute(array(++$currentVersion, $migrationFile));
-					}
 				}
+			} else {
+				$query = $migration[$migrationMethod];
+			}
+			
+			$executed = false;
+			if ( !empty($query) ) {
+				$executed = $pdo->exec($query);
+			}
+			
+			if ( false === $executed ) {
+				$errorInfo = $pdo->errorInfo();
+				
+				$this->error("##################################################");
+				$this->error("FAILED TO EXECUTE: {$migrationFile}");
+				$this->error("ERROR: {$errorInfo[2]}");
+				$this->error("##################################################");
+				
+				$error = true;
+				break;
+			} else {
+				$this->success(sprintf("%01.3fs - %-10s", $execTime, $migrationFile));
+			}
+			
+			if ( $migration['change_id'] > 0 ) {
+				$pdo->prepare("DELETE FROM {$this->changeLogTable} WHERE change_id = ?")
+					->execute(array($migration['change_id']));
+			} else {
+				$setUpQuery = NULL;
+				$tearDownQuery = NULL;
+				
+				if ( method_exists($__migrationObject, $this->setUpMethod) ) {
+					$setUpQuery = $__migrationObject->{$this->setUpMethod}();
+				}
+				
+				if ( method_exists($__migrationObject, $this->tearDownMethod) ) {
+					$tearDownQuery = $__migrationObject->{$this->tearDownMethod}();
+				}
+				
+				$pdo->prepare("INSERT INTO {$this->changeLogTable} VALUES(NULL, NOW(), ?, ?, ?, ?)")
+					->execute(array(++$currentVersion, $migrationFile, $setUpQuery, $tearDownQuery));
 			}
 			
 			$execTime = microtime(true);
@@ -320,10 +335,18 @@ class DbMigrator {
 	 * ################################################################################
 	 */
 	
+	/**
+	 * Returns a list of migrations in the database. These have already been executed.
+	 * 
+	 * @retval array The list of migrations.
+	 */
 	protected function buildMigrationsInDb() {
 		$pdo = $this->getPdo();
 		
-		$migrations = $pdo->query("SELECT change_id, version, script FROM {$this->changeLogTable} ORDER BY version ASC")
+		$sql = "SELECT change_id, version, script, setUp, tearDown
+			FROM {$this->changeLogTable}
+			ORDER BY version ASC";
+		$migrations = $pdo->query($sql)
 			->fetchAll(\PDO::FETCH_ASSOC);
 		
 		if ( is_array($migrations) ) {
@@ -335,6 +358,11 @@ class DbMigrator {
 		return $this->migrationsInDb;
 	}
 	
+	/**
+	 * Returns a list of migrations on the disk. These have yet to be executed.
+	 * 
+	 * @retval array The list of migrations.
+	 */
 	protected function buildMigrationsOnDisk() {
 		$migrationPath = $this->getMigrationPath();
 	
@@ -347,7 +375,9 @@ class DbMigrator {
 				$this->migrationsOnDisk[$version] = array(
 					'change_id' => 0,
 					'version' => $version,
-					'script' => $migrationFile
+					'script' => $migrationFile,
+					'setUp' => NULL,
+					'tearDown' => NULL
 				);
 				
 			}
@@ -358,6 +388,11 @@ class DbMigrator {
 		return $this->migrationsOnDisk;
 	}
 	
+	/**
+	 * Determines the current/latest version installed in the database.
+	 * 
+	 * @retval int The current version.
+	 */
 	protected function determineCurrentVersion() {
 		$pdo = $this->getPdo();
 
@@ -369,6 +404,11 @@ class DbMigrator {
 		return $this->currentVersion;
 	}
 	
+	/**
+	 * Scrubs a script file name to a sanitized migration script name. Included the version number.
+	 * 
+	 * @retval string The full path to the script.
+	 */
 	protected function buildMigrationScriptFileName($version, $scriptName) {
 		$migrationPath = $this->getMigrationPath();
 		
@@ -381,10 +421,20 @@ class DbMigrator {
 		return $migrationFilePath;
 	}
 	
+	/**
+	 * Returns kind of a random string.
+	 * 
+	 * @retval string The random string.
+	 */
 	protected function buildRandomString() {
 		return substr(sha1((string)microtime(true)), 0, 12);
 	}
 	
+	/**
+	 * Sanitizes a migration script name to replace non alphanumeric, period, and dashes to dashes.
+	 * 
+	 * @retval string The name of the sanitized script name.
+	 */
 	protected function sanitizeMigrationScriptName($scriptName) {
 		$scriptName = preg_replace('/[^a-z0-9\-\.]/i', '-', $scriptName);
 		$scriptName = preg_replace('/\-{2,}/', NULL, $scriptName);
@@ -393,6 +443,11 @@ class DbMigrator {
 		return $scriptName;
 	}
 	
+	/**
+	 * Builds the name of the migration class.
+	 * 
+	 * @retval string The name of the class.
+	 */
 	protected function buildMigrationScriptClassName($version, $className) {
 		$cleanClassName = $this->sanitizeClassName($className);
 		$className = "{$this->classPrefix}_{$version}_{$cleanClassName}";
@@ -400,6 +455,11 @@ class DbMigrator {
 		return $className;
 	}
 	
+	/**
+	 * Ensures the class name is valid.
+	 * 
+	 * @retval string The class name.
+	 */
 	protected function sanitizeClassName($className) {
 		$className = str_replace('-', ' ', $className);
 		$className = ucwords($className);
@@ -415,6 +475,11 @@ class DbMigrator {
 	 * ##################################################
 	 */
 	
+	/**
+	 * Executes the method to build the changelog table.
+	 * 
+	 * @retval DbMigrator Returns this for chaining.
+	 */
 	private function buildChangelogTable() {
 		$method = __FUNCTION__ . $this->dbType;
 		if ( method_exists($this, $method) ) {
@@ -423,6 +488,11 @@ class DbMigrator {
 		return $this;
 	}
 	
+	/**
+	 * Builds the changelog table for MySQL.
+	 * 
+	 * @retval bool Returns true.
+	 */
 	private function buildChangelogTableMYSQL() {
 		$pdo = $this->getPdo();
 		
@@ -442,10 +512,14 @@ class DbMigrator {
 					change_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 					created DATETIME NOT NULL,
 					version INT NOT NULL DEFAULT 0,
-					script VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL
+					script VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
+					setUp TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
+					tearDown TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL
 				) ENGINE = MYISAM CHARACTER SET utf8 COLLATE utf8_unicode_ci;";
 			$pdo->exec($tableSql);
 		}
+		
+		return true;
 	}
 	
 }
