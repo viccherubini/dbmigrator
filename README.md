@@ -6,7 +6,8 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 2. Copy DbMigrator.Config.Template.php to DbMigrator.Config.php in the DbMigrator directory. This step is only required if you do not have project specific DbMigrator.Config.php files.
 3. Link the `dbmigrator` script to your /usr/local/bin path:
 	
-	`cd /usr/local/bin && ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator`
+	`cd /usr/local/bin
+	ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator`
 	
 4. Navigate to the root directory of your project.
 	
@@ -60,7 +61,7 @@ Finally, you do not need to worry about prefixing your scripts with the latest v
 
 	dbmigrator create 1-create-table-users
 	
-You'll end up with a script named 1-1-create-table-users-<hash>.php (if it were the first script, for example).
+you'll end up with a script named 1-1-create-table-users-<hash>.php (if it were the first script, for example).
 
 # Database Migration Usage
 Now that you can easily create new migration scripts, it's time to actually migrate! DbMigrator works similar to a linear delineated timeline version control system (like Subversion). Each new migration script is a new numerical version in the timeline. This makes it easy to update or rollback to any version.
