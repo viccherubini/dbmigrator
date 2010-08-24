@@ -28,7 +28,7 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 8. You're all set up now!
 
 # Migration Script Creation
-Using DbMigrator is very simple. Generally, you'll execute everything from the `dbmigrator` command line program within your project directory. By doing so, it will automatically look in `./build/db/` for DbMigrator.Config.php to get local configuration information. If it can not be found there, `dbmigrator` will look for the DbMigrator.Config.php file in the PHP `include_path` in __DbMigrator__.
+Using DbMigrator is very simple. Generally, you'll execute everything from the `dbmigrator` command line program within your project directory. By doing so, it will automatically look in `./build/db/` for DbMigrator.Config.php to get local configuration information. If it can not be found there, `dbmigrator` will look for the DbMigrator.Config.php file in the PHP `include_path` in the directory __DbMigrator__.
 
 The `dbmigrator` program has two options: _create_ and _update_.
 
