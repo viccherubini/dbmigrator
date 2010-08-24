@@ -46,7 +46,7 @@ class DbMigrator {
 	 * @param $pdo The PDO object.
 	 * @retval DbMigrator Returns this for chaining.
 	 */
-	public function attachPdo(\PDO $pdo) {
+	public function attachPdo(PDO $pdo) {
 		$this->pdo = $pdo;
 		return $this;
 	}
@@ -347,7 +347,7 @@ class DbMigrator {
 			FROM {$this->changeLogTable}
 			ORDER BY version ASC";
 		$migrations = $pdo->query($sql)
-			->fetchAll(\PDO::FETCH_ASSOC);
+			->fetchAll(PDO::FETCH_ASSOC);
 		
 		if ( is_array($migrations) ) {
 			foreach ( $migrations as $migration ) {
@@ -497,7 +497,7 @@ class DbMigrator {
 		$pdo = $this->getPdo();
 		
 		$tableList = $pdo->query('SHOW TABLES')
-			->fetchAll(\PDO::FETCH_ASSOC);
+			->fetchAll(PDO::FETCH_ASSOC);
 		$installTable = true;
 		
 		foreach ( $tableList as $table ) {
