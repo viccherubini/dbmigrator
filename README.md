@@ -36,12 +36,12 @@ The _create_ option allows you to create empty migration scripts. Each migration
 
 You must create at least one script, but can create multiple scripts in one command. The following are valid commands:
 
-`dbmigrator create create-table-users`
-`dbmigrator create create-table-users create-table-products insert-default-data`
+	dbmigrator create create-table-users
+	dbmigrator create create-table-users create-table-products insert-default-data
 
 The _create_ method also has a few other niceties. If you create a script with the prefix "create-table" followed by a table name, the __tearDown__ method will automatically have the code to drop that table. Thus calling:
 
-`dbmigrator create create-table-users-to-products` 
+	dbmigrator create create-table-users-to-products
 
 will produce a __tearDown__ method with the query `DROP TABLE users_to_products`. You can use either dashes or underscores in the table name as well.
 
