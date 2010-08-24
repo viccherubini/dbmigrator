@@ -77,3 +77,12 @@ will rollback the database to version 23. Finally, calling _update_ with no argu
 
 	dbmigrate update
 
+One issue arises when your database changelog table is ahead of the scripts on the disk. How can this happen? Simple: you have a development branch where you do all of your latest development, and is currently at version 80. You have a release branch which is in production and at version 70. You need to make a quick change to the release branch, so you checkout release which brings your disk back down to version 70, but your database is at version 80! Fortunately, DbMigrator can handle this. Simple execute the _update_ command everything will be restored to normal.
+
+	dbmigrate update
+	
+Make your changes, commit them to release, upstream merge to development. Now your database is at version 70, and your disk is at version 80. Running _update_ again will restore order.
+
+	dbmigrate update
+	
+# Integration With phing
