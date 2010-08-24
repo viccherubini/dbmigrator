@@ -39,7 +39,7 @@ You must create at least one script, but can create multiple scripts in one comm
 	dbmigrator create create-table-users
 	dbmigrator create create-table-users create-table-products insert-default-data
 
-The _create_ method also has a few other niceties. If you create a script with the prefix "create-table" followed by a table name, the __tearDown__ method will automatically have the code to drop that table. Thus calling:
+The _create_ method also has a few other niceties. If you create a script with the prefix __create-table__ followed by a table name, the __tearDown__ method will automatically have the code to drop that table. Thus calling:
 
 	dbmigrator create create-table-users-to-products
 
@@ -52,5 +52,4 @@ You can use either dashes or underscores in the table name as well. Calling the 
 	dbmigrator create create-table-users-to-products
 	dbmigrator create create-table-users_to_products
 
-This also works if you create a script with the prefix create-database.
-
+This also works if you create a script with the prefix __create-database__.
