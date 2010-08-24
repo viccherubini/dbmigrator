@@ -31,8 +31,6 @@ class DbMigrator {
 	const SQL_CREATE_TABLE = 'create-table';
 	const SQL_CREATE_DATABASE = 'create-database';
 	
-	const SCRIPT_ATTEMPTS = 10;
-	
 	public function __construct($dbType) {
 		$this->messageList = array();
 		$this->dbType = strtoupper($dbType);
@@ -107,17 +105,16 @@ class DbMigrator {
 		fclose($fh);
 		
 		$migrationScript = basename($migrationFilePath);
-		$this->addSuccessMessage("New migration script, {$migrationScript}, was successfully created.");
+		$this->success("New migration script, {$migrationScript}, was successfully created.");
 		
 		return $migrationScript;
 	}
 	
 	/**
-	 * Update the database to the latest version. Compares the migrations in the database to those
-	 * on the disk. If there are new migration scripts on the disk, they are loaded and the setUp()
-	 * method is executed to get the query. The query is then executed.
+	 * Update the database to the a specific version. Compares the migrations in the database to those
+	 * on the disk or the migrations on the disk to those in the database.
 	 * 
-	 * @retval boolean true
+	 * @retval boolean True if all of the migrations successfully execute, false otherwise.
 	 */
 	public function update($version=-1) {
 		$this->buildChangelogTable();
@@ -128,76 +125,50 @@ class DbMigrator {
 		$migrationPath = $this->getMigrationPath();
 		$currentVersion = $this->determineCurrentVersion();
 		
-		
-		
-		//$updateMigrations = array_diff($migrationsOnDisk, $migrationsInDb);
-		$method = NULL;
 		$version = intval($version);
-		$scripts = array();
+
+		$migrationMethod = NULL;
+		$migrationScriptList = array();
 		
 		if ( -1 == $version ) {
-			
-			
-			
-		} elseif ( $version < $currentVersion ) {
-			// Rolling back to $version
-			// Get the scripts between $version and $currentVersion
-			$version++;
-			$sql = "SELECT change_id, script FROM {$this->changeLogTable}
-				WHERE version BETWEEN ? AND ?
-				ORDER BY version DESC";
-			$statement = $pdo->prepare($sql);
-			$executed = $statement->execute(array($version, $currentVersion));
-		
-			if ( !$executed ) {
-				$this->error("Failed to select scripts from Change Log table to rollback.");
-				return false;
-			}
-		
-			$scripts = $statement->fetchAll(\PDO::FETCH_ASSOC);
-			$method = $this->tearDownMethod;
-			
-		} elseif ( $version > $currentVersion ) {
-			// Updating to $version
-			// We have a list of scripts in the database
-			// We have a list of scripts on the disk
-			// The number of scripts on the disk should be greater than the currentVersion.
-			
-			
-			
-			
-			
-			
+			$version = count($migrationsOnDisk);
 		}
 		
-		
-		
-		print_r($scripts);
-		echo $method, PHP_EOL;
-		
-		
-		
-		
-/*
-		
-		
-		
-		
-		
+		if ( $version < $currentVersion ) {
+			$this->message("ROLLING BACK TO VERSION {$version}");
+			
+			$migrationScriptList = array_filter($migrationsInDb, function($m) use ($version, $currentVersion) {
+				return ( $m['version'] > $version && $m['version'] <= $currentVersion );
+			});
+			
+			$migrationMethod = $this->tearDownMethod;
+		} elseif ( $version > $currentVersion ) {
+			$this->message("UPDATING TO VERSION {$version}");
+			
+			$migrationScriptList = array_filter($migrationsOnDisk, function($m) use ($version, $currentVersion) {
+				return ( $m['version'] <= $version && $m['version'] > $currentVersion );
+			});
+			
+			$migrationMethod = $this->setUpMethod;
+		} elseif ( $version == $currentVersion ) {
+			$this->message("You can not update or rollback to the current version.");
+			return false;
+		}
 		
 		$error = false;
 		$startTime = microtime(true);
 		$execTime = 0;
 		
-		foreach ( $updateMigrations as $migrationFile ) {
+		foreach ( $migrationScriptList as $migration ) {
+			$migrationFile = $migration['script'];
 			$migrationFilePath = $migrationPath . $migrationFile;
+			
 			if ( is_file($migrationFilePath) ) {
 				require_once $migrationFilePath;
 				
-				$setUpMethod = $this->setUpMethod;
-				if ( is_object($__migrationObject) && method_exists($__migrationObject, $setUpMethod) ) {
+				if ( is_object($__migrationObject) && method_exists($__migrationObject, $migrationMethod) ) {
 					$migrationClass = get_class($__migrationObject);
-					$query = $__migrationObject->$setUpMethod();
+					$query = $__migrationObject->$migrationMethod();
 					
 					$executed = false;
 					if ( !empty($query) ) {
@@ -218,28 +189,31 @@ class DbMigrator {
 						$this->success(sprintf("%01.3fs - %-10s", $execTime, $migrationFile));
 					}
 					
-					$pdo->prepare("INSERT INTO {$this->changeLogTable} VALUES(NULL, NOW(), ?, ?)")
-						->execute(array(++$currentVersion, $migrationFile));
+					if ( $migration['change_id'] > 0 ) {
+						$pdo->prepare("DELETE FROM {$this->changeLogTable} WHERE change_id = ?")
+							->execute(array($migration['change_id']));
+					} else {
+						$pdo->prepare("INSERT INTO {$this->changeLogTable} VALUES(NULL, NOW(), ?, ?)")
+							->execute(array(++$currentVersion, $migrationFile));
+					}
 				}
 			}
 			
 			$execTime = microtime(true);
 			$execTime -= $startTime;
 		}
+		
+		$pdo->query("OPTIMIZE TABLE {$this->changeLogTable}");
 
 		if ( $error ) {
 			$this->error("FAILURE! DbMigrator COULD NOT UPDATE TO THE LATEST VERSION OF THE DATABASE!");
 		} else {
-			$this->success("Successfully migrated the database to the most current version, {$currentVersion}.");
+			$this->success("Successfully migrated the database to version {$version}.");
+			$this->success(sprintf("Migration took %01.3f seconds.", $execTime));
 		}
-*/
 		
-		return true;
+		return (!$error);
 	}
-	
-	
-	
-	
 	
 	/**
 	 * Sets the path to where migrations are stored on the disk. Automatically appends the DIRECTORY_SEPARATOR to the
@@ -339,50 +313,12 @@ class DbMigrator {
 		echo "  ## \033[1;34m{$message}\033[m", PHP_EOL;
 	}
 	
-	/**
-	 * Print all messages to the console.
-	 * 
-	 * @param $message The message to print.
-	 */
-	public function printMessageList() {
-		foreach ( $this->messageList as $message ) {
-			switch ( $message['type'] ) {
-				case DbMigrator::MESSAGE_SUCCESS: {
-					$this->success($message['message']);
-					break;
-				}
-				
-				case DbMigrator::MESSAGE_ERROR: {
-					$this->error($message['message']);
-					break;
-				}
-			}
-		}
-		return true;
-	}
-	
-	
-	
+
 	/**
 	 * ################################################################################
 	 * PROTECTED METHODS
 	 * ################################################################################
 	 */
-	
-	protected function addErrorMessage($message) {
-		$this->addMessage(self::MESSAGE_ERROR, $message);
-		return $this;
-	}
-
-	protected function addSuccessMessage($message) {
-		$this->addMessage(self::MESSAGE_SUCCESS, $message);
-		return $this;
-	}
-
-	protected function addMessage($type, $message) {
-		$this->messageList[] = array('type' => $type, 'message' => $message);
-		return $this;
-	}
 	
 	protected function buildMigrationsInDb() {
 		$pdo = $this->getPdo();
@@ -405,11 +341,19 @@ class DbMigrator {
 		$migrations = glob($migrationPath . "*.{$this->ext}");
 		if ( is_array($migrations) ) {
 			foreach ( $migrations as $migration ) {
-				$this->migrationsOnDisk[] = trim(basename($migration));
+				$migrationFile = trim(basename($migration));
+				$version = (int)current(explode('-', $migrationFile));
+				
+				$this->migrationsOnDisk[$version] = array(
+					'change_id' => 0,
+					'version' => $version,
+					'script' => $migrationFile
+				);
+				
 			}
 		}
 		
-		natsort($this->migrationsOnDisk);
+		ksort($this->migrationsOnDisk);
 		
 		return $this->migrationsOnDisk;
 	}
