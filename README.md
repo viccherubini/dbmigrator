@@ -7,6 +7,7 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 3. Link the `dbmigrator` script to your /usr/local/bin path:
 	
 	`cd /usr/local/bin
+	
 	ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator`
 	
 4. Navigate to the root directory of your project.
