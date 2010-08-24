@@ -1,0 +1,71 @@
+#!/usr/bin/env php
+<?php
+
+declare(encoding='UTF-8');
+
+require_once 'DbMigrator/DbMigrator.php';
+
+$cwd = getcwd();
+$localConfig = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'DbMigrator.Config.php'));
+
+if ( is_file($localConfig) ) {
+	require_once $localConfig;
+} else {
+	require_once 'DbMigrator/DbMigrator.Config.php';
+}
+
+$dbMigrator = new DbMigrator(DB_TYPE);
+$dbMigrator->setMigrationPath(MIGRATION_PATH);
+
+if ( 1 == $argc ) {
+	$dbMigrator->error("Please enter at least one argument.");
+	exit(1);
+}
+
+try {
+	$pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME, DB_USER, DB_PASSWORD);
+	$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_SILENT);
+	
+	$dbMigrator->attachPdo($pdo);
+} catch ( PDOException $e ) {
+	error("Failed to connect to the database with specified credentials. Actions rollback and update are unavailable, create is not.");
+}
+
+$action = strtolower($argv[1]);
+
+switch ( $action ) {
+	case 'create': {
+		if ( $argc < 2 ) {
+			$dbMigrator->error("Please enter the name of at least one script to create.");
+		} else {
+			$scriptList = array_slice($argv, 2);
+			$scriptListCount = count($scriptList);
+		
+			$dbMigrator->message("Creating {$scriptListCount} migration " . ( $scriptListCount > 1 ? 'scripts' : 'script' ) . '.' . PHP_EOL);
+		
+			for ( $i=0; $i<$scriptListCount; $i++ ) {
+				$dbMigrator->create($scriptList[$i]);
+			}
+		}
+		
+		break;
+	}
+	
+	case 'update': {
+		$version = -1;
+		if ( 3 == $argc ) {
+			$version = abs(intval($argv[2]));
+		}
+		
+		$dbMigrator->update($version);
+		
+		break;
+	}
+	
+	case 'default': {
+		$dbMigrator->error("Usage: dbmigrator [create,update] [<script-name>,<version-number>]");
+		break;
+	}
+}
+
+exit(0);
