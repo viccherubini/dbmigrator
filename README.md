@@ -17,8 +17,14 @@ Versioning databases is a pain in the ass. DbMigrator is here to help ease that 
 	`mkdir build/db -p`
 	
 	The directory __build__ will contain your project specific DbMigrator.Config.php file and __db__ will contain all of your build scripts.
-6. Copy DbMigrator.Config.Template.php from where you cloned the repository to the local __build__ directory as DbMigrator.Config.php. `cp /usr/share/php/DbMigrator/DbMigrator.Config.Template.php DbMigrator.Config.php`
-7. Open up the new DbMigrator.Config.php file and edit the configuration constants. The `MIGRATION_PATH` constant should be set to `/home/vmc/Projects/My-Project/build/db` or whatever the full path is to your project.
+6. Copy DbMigrator.Config.Template.php from where you cloned the repository to the local __build__ directory as DbMigrator.Config.php.
+	
+	`cp /usr/share/php/DbMigrator/DbMigrator.Config.Template.php DbMigrator.Config.php`
+	
+7. Open up the new DbMigrator.Config.php file and edit the configuration constants. The `MIGRATION_PATH` constant should be set to:
+	
+	`/full/path/to/project/build/db`
+	
 8. You're all set up now!
 
 # Usage
