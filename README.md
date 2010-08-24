@@ -43,7 +43,14 @@ The _create_ method also has a few other niceties. If you create a script with t
 
 	dbmigrator create create-table-users-to-products
 
-will produce a __tearDown__ method with the query `DROP TABLE users_to_products`. You can use either dashes or underscores in the table name as well.
+will produce a __tearDown__ method with the query 
+	
+	DROP TABLE users_to_products;
+
+You can use either dashes or underscores in the table name as well. Calling the following is identical:
+
+	dbmigrator create create-table-users-to-products
+	dbmigrator create create-table-users_to_products
 
 This also works if you create a script with the prefix create-database.
 
