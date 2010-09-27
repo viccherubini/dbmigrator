@@ -257,7 +257,7 @@ class DbMigrator {
 	 */
 	public function setMigrationPath($migrationPath) {
 		$pathLength = strlen($migrationPath);
-		if ( $migrationPath[$pathLength-1] != DIRECTORY_SEPARATOR ) {
+		if ( $pathLength > 0 && $migrationPath[$pathLength-1] != DIRECTORY_SEPARATOR ) {
 			$migrationPath .= DIRECTORY_SEPARATOR;
 		}
 		
