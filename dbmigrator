@@ -24,7 +24,7 @@ if ( 1 == $argc ) {
 
 try {
 	$pdo = new PDO('mysql:host=' . DB_HOST . ';dbname=' . DB_NAME, DB_USER, DB_PASSWORD);
-	$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_SILENT);
+	$pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, 1);
 	
 	$dbMigrator->attachPdo($pdo);
 } catch ( PDOException $e ) {
