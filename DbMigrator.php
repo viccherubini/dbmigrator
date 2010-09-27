@@ -135,9 +135,16 @@ class DbMigrator {
 		if ( $version < $currentVersion ) {
 			$this->message("ROLLING BACK TO VERSION {$version}");
 			
-			$migrationScriptList = array_filter($migrationsInDb, function($m) use ($version, $currentVersion) {
-				return ( $m['version'] > $version && $m['version'] <= $currentVersion );
-			});
+			// PHP5.3 Goodness
+			//$migrationScriptList = array_filter($migrationsInDb, function($m) use ($version, $currentVersion) {
+			//	return ( $m['version'] > $version && $m['version'] <= $currentVersion );
+			//});
+			$migrationScriptList = array();
+			foreach ( $migrationsInDb as $m ) {
+				if ( $m['version'] > $version && $m['version'] <= $currentVersion ) {
+					$migrationScriptList[] = $m;
+				}
+			}
 			
 			// Need to execute the scripts in reverse order
 			krsort($migrationScriptList);
@@ -146,9 +153,16 @@ class DbMigrator {
 		} elseif ( $version > $currentVersion ) {
 			$this->message("UPDATING TO VERSION {$version}");
 			
-			$migrationScriptList = array_filter($migrationsOnDisk, function($m) use ($version, $currentVersion) {
-				return ( $m['version'] <= $version && $m['version'] > $currentVersion );
-			});
+			// PHP5.3 Goodness
+			//$migrationScriptList = array_filter($migrationsOnDisk, function($m) use ($version, $currentVersion) {
+			//	return ( $m['version'] <= $version && $m['version'] > $currentVersion );
+			//});
+			$migrationScriptList = array();
+			foreach ( $migrationsOnDisk as $m ) {
+				if ( $m['version'] <= $version && $m['version'] > $currentVersion ) {
+					$migrationScriptList[] = $m;
+				}
+			}
 			
 			$migrationMethod = $this->setUpMethod;
 		} elseif ( $version == $currentVersion ) {
@@ -178,7 +192,11 @@ class DbMigrator {
 			
 			$executed = false;
 			if ( !empty($query) ) {
-				$executed = $pdo->exec($query);
+				$pdoStatement = $pdo->query($query);
+				if ( false !== $pdoStatement ) {
+					$executed = true;
+					$pdoStatement->closeCursor();
+				}
 			}
 			
 			if ( false === $executed ) {
