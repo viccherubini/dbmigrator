@@ -1,0 +1,174 @@
+<!doctype html>
+<html>
+<head>
+	<title>DbMigrator README</title>
+</head>
+<body>
+	
+	<h1>DbMigrator</h1>
+	<p>Versioning databases is a pain in the ass. DbMigrator is here to help ease that pain. Let's see how that'll work.</p>
+
+	<h2>Setup</h2>
+	<ol>
+		<li>
+			<p>Clone this repository into your PHP <code>include_path</code> (on Debian systems, in <strong>/usr/share/php</strong> for example).</p>
+		</li>
+		
+		<li>
+			<p>Copy DbMigrator.Config.Template.php to DbMigrator.Config.php in the DbMigrator directory. This step is only required if you do not have project specific DbMigrator.Config.php files.</p>
+		</li>
+		
+		<li>
+			<p>Link the <code>dbmigrator</code> script to your /usr/local/bin path:</p>
+			<pre>cd /usr/local/bin &amp;&amp; sudo ln -s /usr/share/php/DbMigrator/dbmigrator dbmigrator</pre>
+		</li>
+		
+		<li>
+			<p>Navigate to the root directory of your project.</p>
+			<pre>cd ~/Projects/My-Project</pre>
+		</li>
+		
+		<li>
+			<p>Create a directory named <strong>build</strong> with a subdirectory named <strong>db</strong>.</p>
+			<pre>mkdir build/db -p</pre>
+			<p>The directory <strong>build</strong> will contain your project specific DbMigrator.Config.php file and <strong>db</strong> will contain all of your build scripts.</p>
+		</li>
+		
+		<li>
+			<p>Copy DbMigrator.Config.Template.php from where you cloned the repository to the local <strong>build</strong> directory as DbMigrator.Config.php.</p>
+			<pre>cp /usr/share/php/DbMigrator/DbMigrator.Config.Template.php DbMigrator.Config.php</pre>
+		</li>
+		
+		<li>
+			<p>Open up the new DbMigrator.Config.php file and edit the configuration constants. The <code>MIGRATION_PATH</code> constant should be set to:</p>
+			<pre>/full/path/to/project/<strong>build/db</strong></pre>
+			<p>Note: The important part is that the <code>MIGRATION_PATH</code> constant end with the directory <strong>build/db</strong>.</p>
+		</li>
+		
+		<li>
+			<p>You're all set up now!</p>
+		</li>
+	</ol>
+	
+	<h2>Migration Script Creation</h2>
+	<p>
+		Using DbMigrator is very simple. Generally, you'll execute everything from the <code>dbmigrator</code> command line
+		program within your project directory. By doing so, it will automatically look in <strong>./build/db/</strong> for
+		DbMigrator.Config.php to get local configuration information. If it can not be found there, dbmigrator will look for
+		the DbMigrator.Config.php file in the PHP include_path in the directory <strong>DbMigrator</strong>.
+	</p>
+
+	<p>
+		The dbmigrator program has two options: <em>create</em> and <em>update</em>.
+	</p>
+
+	<p>
+		The <em>create</em> option allows you to create empty migration scripts. Each migration script is a small PHP class
+		that contains two methods, <strong>setUp</strong> and <strong>tearDown</strong>, each of which returns an empty
+		string. Each method will need to be updated to return a valid SQL query (or queries, if your database driver can
+		support multiple queries executed at once). When updating to a new version of the database, the
+		<strong>setUp</strong> method is called. When rolling back to a previous version of the database, the
+		<strong>tearDown</strong> method is called.
+	</p>
+
+	<p>
+		You must create at least one script, but can create multiple scripts in one command. The following are valid
+		commands:
+	</p>
+
+	<pre>dbmigrator create create-table-users
+dbmigrator create create-table-users create-table-products insert-default-data</pre>
+
+	<p>
+		The second command will create three empty migration scripts.
+	</p>
+
+	<p>
+		The <em>create</em> method also has a few other niceties. If you create a script with the prefix
+		<strong>create-table</strong> followed by a table name, the <strong>tearDown</strong> method will automatically have
+		the code to drop that table. Thus calling:
+	</p>
+
+	<pre>dbmigrator create create-table-users-to-products</pre>
+
+	<p>
+		will produce a <strong>tearDown</strong> method with the query:
+	</p>
+		
+	<pre>DROP TABLE users_to_products;</pre>
+
+	<p>
+		You can use either dashes or underscores in the table name as well. Calling the following is identical:
+	</p>
+
+	<pre>dbmigrator create create-table-users-to-products
+dbmigrator create create-table-users_to_products</pre>
+
+	<p>
+		This also works if you create a script with the prefix <strong>create-database</strong>.
+	</p>
+
+	<p>
+		Finally, you do not need to worry about prefixing your scripts with the latest version. DbMigrator will handle that
+		for you. If you run:
+	</p>
+
+	<pre>dbmigrator create 1-create-table-users</pre>
+		
+	<p>
+		you'll end up with a script named <code>1-1-create-table-users-&lt;hash&gt;.php</code>
+		(if it were the first script, for example).
+	</p>
+
+	<h2>Database Migration Usage</h2>
+	<p>
+		Now that you can easily create new migration scripts, it's time to actually migrate! DbMigrator works similar to a
+		linear timeline version control system (like Subversion). Each new migration script is a new numerical
+		version in the timeline. This makes it easy to update or rollback to any version.</p>
+
+	<p>
+		DbMigrator is smart enough to determine if you're updating to a new version or rolling back to a previous version.
+		Thus, if your database is currently at version 52, and you have migration scripts on disk numbering to version 73,
+		calling:
+	</p>
+
+	<pre>dbmigrate update 70</pre>
+
+	<p>
+		will update the database to version 70. Calling:
+	</p>
+
+	<pre>dbmigrate update 23</pre>
+
+	<p>
+		will rollback the database to version 23. Finally, calling <em>update</em> with no arguments updates to the HEAD
+		(or latest) version:
+	</p>
+
+	<pre>dbmigrate update</pre>
+
+	<p>
+		One issue arises when your database changelog table is ahead of the scripts on the disk. How can this happen?
+		Simple: you have a development branch where you do all of your latest development, and is currently at version 80.
+		You have a release branch which is in production and at version 70. You need to make a quick change to the release
+		branch, so you checkout release which brings your disk back down to version 70, but your database is at version 80!
+		Fortunately, DbMigrator can handle this. Simple execute the <em>update</em> command everything will be restored
+		to normal.
+	</p>
+
+	<pre>dbmigrate update</pre>
+		
+	<p>
+		Make your changes, commit them to release, upstream merge to development. Now your database is at version 70, and
+		your disk is at version 80. Running <em>update</em> again will restore order.
+	</p>
+
+	<pre>dbmigrate update</pre>
+		
+	<h2>Integration With phing</h2>
+	<p>
+		<strong>Coming Soon</strong>
+	</p>
+	
+</body>
+</html>
