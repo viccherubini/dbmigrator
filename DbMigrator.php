@@ -77,12 +77,12 @@ class DbMigrator {
 			$tableName = substr($scriptName, strlen(self::SQL_CREATE_TABLE)+1);
 			$tableName = str_replace('-', '_', $tableName);
 			
-			$tearDownCode = "DROP TABLE {$tableName}";
+			$tearDownCode = "DROP TABLE IF EXISTS {$tableName}";
 		} elseif ( 0 === stripos($scriptName, self::SQL_CREATE_DATABASE) ) {
 			$dbName = substr($scriptName, strlen(self::SQL_CREATE_DATABASE)+1);
 			$dbName = str_replace('-', '_', $dbName);
 			
-			$tearDownCode = "DROP DATABASE {$dbName}";
+			$tearDownCode = "DROP DATABASE IF EXISTS {$dbName}";
 		}
 		
 		$now = date('Y-m-d H:i:s');
