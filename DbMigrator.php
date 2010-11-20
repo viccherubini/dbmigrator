@@ -204,7 +204,7 @@ class DbMigrator {
 				
 				$this->error("##################################################");
 				$this->error("FAILED TO EXECUTE: {$migrationFile}");
-				if ( is_array($errorInfo) && count($errorInfo) > 2) ){
+				if ( is_array($errorInfo) && count($errorInfo) > 2 ){
 					$this->error("ERROR: {$errorInfo[2]}");
 				} else {
 					$this->error("ERROR: Empty query");
