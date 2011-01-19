@@ -2,22 +2,17 @@
 
 declare(encoding='UTF-8');
 
-/**
- * Class to facilitate handling database transactions.
- *
- * @author Vic Cherubini <vic.cherubini@quickoffice.com>
- */
 class DbMigrator {
 
-	private $currentVersion = 0;
+	private $latestTimestamp = -1;
 
 	private $pdo = NULL;
 	private $migrationPath = NULL;
-	
+
 	private $messageList = array();
 	private $migrationsInDb = array();
 	private $migrationsOnDisk = array();
-	
+
 	private $changeLogTable = '_schema_changelog';
 	private $classPrefix = 'Migration';
 	private $dbType = 'MYSQL';
@@ -27,72 +22,52 @@ class DbMigrator {
 
 	const MESSAGE_SUCCESS = 'success';
 	const MESSAGE_ERROR = 'error';
-	
+
 	const SQL_CREATE_TABLE = 'create-table';
 	const SQL_CREATE_DATABASE = 'create-database';
-	
+
 	public function __construct($dbType) {
 		$this->messageList = array();
 		$this->dbType = strtoupper($dbType);
 	}
 
 	public function __destruct() {
-	
+
 	}
-	
-	/**
-	 * Attach the PDO object to the migration object.
-	 * 
-	 * @param $pdo The PDO object.
-	 * @retval DbMigrator Returns this for chaining.
-	 */
+
 	public function attachPdo(PDO $pdo) {
 		$this->pdo = $pdo;
 		return $this;
 	}
-	
-	/**
-	 * Build a new migration script. Creates a new class based on the script name and sets up the
-	 * default methods.
-	 * 
-	 * @param $scriptName The name of the script to create. Will be named <current-version>-<script-name>.<ext>.
-	 * @retval string Returns the name of the newly created script.
-	 */
+
 	public function create($scriptName) {
-		$migrationsOnDisk = $this->buildMigrationsOnDisk();
-		
-		$version = 0;
-		foreach ( $migrationsOnDisk as $migration ) {
-			$version = $migration['version'];
-		}
-		
-		$version++;
-		
-		$migrationFilePath = $this->buildMigrationScriptFileName($version, $scriptName);
-		$className = $this->buildMigrationScriptClassName($version, $scriptName);
-		
-		
+		$timestamp = (microtime(true)*10000);
+
+		$migrationFilePath = $this->buildMigrationScriptFileName($timestamp, $scriptName);
+		$className = $this->buildMigrationScriptClassName($timestamp, $scriptName);
+
 		$tearDownCode = NULL;
 		if ( 0 === stripos($scriptName, self::SQL_CREATE_TABLE) ) {
 			$tableName = substr($scriptName, strlen(self::SQL_CREATE_TABLE)+1);
 			$tableName = str_replace('-', '_', $tableName);
-			
+
 			$tearDownCode = "DROP TABLE IF EXISTS {$tableName}";
 		} elseif ( 0 === stripos($scriptName, self::SQL_CREATE_DATABASE) ) {
 			$dbName = substr($scriptName, strlen(self::SQL_CREATE_DATABASE)+1);
 			$dbName = str_replace('-', '_', $dbName);
-			
+
 			$tearDownCode = "DROP DATABASE IF EXISTS {$dbName}";
 		}
-		
+
 		$now = date('Y-m-d H:i:s');
-		
+
 		$fh = fopen($migrationFilePath, 'w');
 			fwrite($fh, "<?php" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "// This file was automatically generated, ADD YOUR QUERIES BELOW." . PHP_EOL);
 			fwrite($fh, "// CREATION DATE: {$now}" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "\$__migrationObject = new {$className};" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "class {$className} {" . PHP_EOL . PHP_EOL);
+			fwrite($fh, "\tpublic \$timestamp = '{$timestamp}';" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "\tpublic function {$this->setUpMethod}() {" . PHP_EOL);
 			fwrite($fh, "\t\treturn \"\";" . PHP_EOL);
 			fwrite($fh, "\t}" . PHP_EOL . PHP_EOL);
@@ -101,107 +76,126 @@ class DbMigrator {
 			fwrite($fh, "\t}" . PHP_EOL);
 			fwrite($fh, "}");
 		fclose($fh);
-		
+
 		$migrationScript = basename($migrationFilePath);
 		$this->success("New migration script, {$migrationScript}, was successfully created.");
-		
+
 		return $migrationScript;
 	}
-	
-	/**
-	 * Update the database to the a specific version. Compares the migrations in the database to those
-	 * on the disk or the migrations on the disk to those in the database.
-	 * 
-	 * @retval boolean True if all of the migrations successfully execute, false otherwise.
-	 */
-	public function update($version=-1) {
+
+	public function createSnapshot($snapshot) {
+		$migrationsOnDisk = $this->buildMigrationsOnDisk();
+		$migrationsInSnapshots = array()
+		$snapshotsOnDisk = array();
+
+		$migrationPath = $this->getMigrationPath();
+		$snapshots = glob($migrationPath . "*.snap");
+		if (is_array($snapshots)) {
+			foreach ($snapshots as $snapshot) {
+				$snapshotFile = trim(basename($snapshot));
+				$timestamp = current(explode('-', $snapshotFile));
+
+				$snapshotsOnDisk[$timestamp] = $snapshotFile;
+			}
+		}
+
+		foreach ($snapshotsOnDisk as $snapshotFile) {
+			// Open the file
+			$snapshotContents = file_get_contents($migrationPath . $snapshotFile);
+			$snapshots = explode(PHP_EOL, $snapshotContents);
+		}
+
+	}
+
+	public function update($timestamp=-1) {
 		$this->buildChangelogTable();
-		
+
 		$pdo = $this->getPdo();
 		$migrationsOnDisk = $this->buildMigrationsOnDisk();
 		$migrationsInDb = $this->buildMigrationsInDb();
 		$migrationPath = $this->getMigrationPath();
-		$currentVersion = $this->determineCurrentVersion();
-		
-		$version = intval($version);
+		$latestTimestamp = $this->determineLatestTimestamp();
 
 		$migrationMethod = NULL;
 		$migrationScriptList = array();
-		
-		if ( -1 == $version ) {
-			$version = count($migrationsOnDisk);
+
+		if (-1 == $timestamp) {
+			$timestamp = (microtime(true)*10000);
 		}
-		
-		if ( $version < $currentVersion ) {
-			$this->message("ROLLING BACK TO VERSION {$version}");
-			
+
+		$migrationsOnDiskCount = count($migrationsOnDisk);
+		$migrationsInDbCount = count($migrationsInDb);
+
+		if ($timestamp <= $latestTimestamp) {
+			$this->message("ROLLING BACK TO TIMESTAMP {$timestamp}");
+
 			// PHP5.3 Goodness
 			//$migrationScriptList = array_filter($migrationsInDb, function($m) use ($version, $currentVersion) {
 			//	return ( $m['version'] > $version && $m['version'] <= $currentVersion );
 			//});
 			$migrationScriptList = array();
 			foreach ( $migrationsInDb as $m ) {
-				if ( $m['version'] > $version && $m['version'] <= $currentVersion ) {
+				if ( $m['timestamp'] > $timestamp && $m['timestamp'] <= $latestTimestamp ) {
 					$migrationScriptList[] = $m;
 				}
 			}
-			
+
 			// Need to execute the scripts in reverse order
 			krsort($migrationScriptList);
-			
+
 			$migrationMethod = $this->tearDownMethod;
-		} elseif ( $version > $currentVersion ) {
-			$this->message("UPDATING TO VERSION {$version}");
-			
+		} elseif ($timestamp > $latestTimestamp && $migrationsOnDiskCount != $migrationsInDbCount) {
+			$this->message("UPDATING TO TIMESTAMP {$timestamp}");
+
 			// PHP5.3 Goodness
 			//$migrationScriptList = array_filter($migrationsOnDisk, function($m) use ($version, $currentVersion) {
 			//	return ( $m['version'] <= $version && $m['version'] > $currentVersion );
 			//});
 			$migrationScriptList = array();
 			foreach ( $migrationsOnDisk as $m ) {
-				if ( $m['version'] <= $version && $m['version'] > $currentVersion ) {
+				if ( $m['timestamp'] <= $timestamp && $m['timestamp'] > $latestTimestamp ) {
 					$migrationScriptList[] = $m;
 				}
 			}
-			
+
 			$migrationMethod = $this->setUpMethod;
-		} elseif ( $version == $currentVersion ) {
+		} else {
 			$this->message("You are already at the latest version of the database.");
 			return false;
 		}
-		
+
 		$error = false;
 		$startTime = microtime(true);
 		$execTime = 0;
-		
-		foreach ( $migrationScriptList as $migration ) {
+
+		foreach ($migrationScriptList as $migration) {
 			$migrationFile = $migration['script'];
 			$migrationFilePath = $migrationPath . $migrationFile;
-			
+
 			$query = NULL;
-			if ( is_file($migrationFilePath) ) {
-				require_once $migrationFilePath;
-				
-				if ( is_object($__migrationObject) && method_exists($__migrationObject, $migrationMethod) ) {
+			if (is_file($migrationFilePath)) {
+				require_once($migrationFilePath);
+
+				if (is_object($__migrationObject) && method_exists($__migrationObject, $migrationMethod)) {
 					$migrationClass = get_class($__migrationObject);
 					$query = $__migrationObject->$migrationMethod();
 				}
 			} else {
 				$query = $migration[$migrationMethod];
 			}
-			
+
 			$executed = false;
-			if ( !empty($query) ) {
+			if (!empty($query)) {
 				$pdoStatement = $pdo->query($query);
-				if ( false !== $pdoStatement ) {
+				if (false !== $pdoStatement) {
 					$executed = true;
 					$pdoStatement->closeCursor();
 				}
 			}
-			
-			if ( false === $executed ) {
+
+			if (false === $executed) {
 				$errorInfo = $pdo->errorInfo();
-				
+
 				$this->error("##################################################");
 				$this->error("FAILED TO EXECUTE: {$migrationFile}");
 				if ( is_array($errorInfo) && count($errorInfo) > 2 ){
@@ -210,298 +204,188 @@ class DbMigrator {
 					$this->error("ERROR: Empty query");
 				}
 				$this->error("##################################################");
-				
+
 				$error = true;
 				break;
 			} else {
 				$this->success(sprintf("%01.3fs - %-10s", $execTime, $migrationFile));
 			}
-			
-			if ( $migration['change_id'] > 0 ) {
+
+			if ($migration['change_id'] > 0) {
 				$pdo->prepare("DELETE FROM {$this->changeLogTable} WHERE change_id = ?")
 					->execute(array($migration['change_id']));
 			} else {
 				$setUpQuery = NULL;
 				$tearDownQuery = NULL;
-				
+
 				if ( method_exists($__migrationObject, $this->setUpMethod) ) {
 					$setUpQuery = $__migrationObject->{$this->setUpMethod}();
 				}
-				
+
 				if ( method_exists($__migrationObject, $this->tearDownMethod) ) {
 					$tearDownQuery = $__migrationObject->{$this->tearDownMethod}();
 				}
-				
+
 				$pdo->prepare("INSERT INTO {$this->changeLogTable} VALUES(NULL, NOW(), ?, ?, ?, ?)")
-					->execute(array(++$currentVersion, $migrationFile, $setUpQuery, $tearDownQuery));
+					->execute(array($__migrationObject->timestamp, $migrationFile, $setUpQuery, $tearDownQuery));
 			}
-			
+
 			$execTime = microtime(true);
 			$execTime -= $startTime;
 		}
-		
+
 		$pdo->query("OPTIMIZE TABLE {$this->changeLogTable}");
 
 		if ( $error ) {
 			$this->error("FAILURE! DbMigrator COULD NOT UPDATE TO THE LATEST VERSION OF THE DATABASE!");
 		} else {
-			$this->success("Successfully migrated the database to version {$version}.");
+			$this->success("Successfully migrated the database to timestamp {$timestamp}.");
 			$this->success(sprintf("Migration took %01.3f seconds.", $execTime));
 		}
-		
+
 		return (!$error);
 	}
-	
-	/**
-	 * Sets the path to where migrations are stored on the disk. Automatically appends the DIRECTORY_SEPARATOR to the
-	 * path if it is not already on there.
-	 * 
-	 * @param $migrationPath The path to store migrations.
-	 * @retval DbMigrator Returns $this for chaining.
-	 */
+
 	public function setMigrationPath($migrationPath) {
 		$pathLength = strlen($migrationPath);
-		if ( $pathLength > 0 && $migrationPath[$pathLength-1] != DIRECTORY_SEPARATOR ) {
+		if ($pathLength > 0 && $migrationPath[$pathLength-1] != DIRECTORY_SEPARATOR) {
 			$migrationPath .= DIRECTORY_SEPARATOR;
 		}
-		
+
 		$this->migrationPath = $migrationPath;
 		return $this;
 	}
-	
-	/**
-	 * Returns the current version the database is installed to.
-	 * 
-	 * @retval integer Returns the databases version.
-	 */
+
 	public function getCurrentVersion() {
 		return $this->currentVersion;
 	}
-	
-	/**
-	 * Returns the list of messages generated by normal operation.
-	 * 
-	 * @retval array List of messages.
-	 */
+
 	public function getMessageList() {
 		return $this->messageList;
 	}
-	
-	/**
-	 * Returns a list of migrations that have been installed in the database.
-	 * 
-	 * @retval array Returns the migrations in the database.
-	 */
+
 	public function getMigrationsInDb() {
 		return $this->migrationsInDb;
 	}
-	
-	/**
-	 * Returns a list of migrations that have been installed on the disk.
-	 * 
-	 * @retval array Returns the migrations on the disk.
-	 */
+
 	public function getMigrationsOnDisk() {
 		return $this->migrationsOnDisk;
 	}
-	
-	/**
-	 * Returns the path that migrations are placed. The migration scripts are located here.
-	 * 
-	 * @retval string Returns the path the migrations are stored in.
-	 */
+
 	public function getMigrationPath() {
 		return $this->migrationPath;
 	}
-	
-	/**
-	 * Returns the PDO object.
-	 * 
-	 * @retval object The PDO object.
-	 */
+
 	public function getPdo() {
 		return $this->pdo;
 	}
-	
-	/**
-	 * Print an error message directly to the console. It is colored red and bold.
-	 * 
-	 * @param $message The message to print.
-	 */
+
 	public function error($message) {
 		echo "  ## \033[1;31m{$message}\033[m", PHP_EOL;
 	}
-	
-	/**
-	 * Print a success message directly to the console. It is colored gree and bold.
-	 * 
-	 * @param $message The message to print.
-	 */
+
 	public function success($message) {
 		echo "  ## \033[1;32m{$message}\033[m", PHP_EOL;
 	}
-	
-	/**
-	 * Print a neutral message directly to the console. It is colored blue and bold.
-	 * 
-	 * @param $message The message to print.
-	 */
+
 	public function message($message) {
 		echo "  ## \033[1;34m{$message}\033[m", PHP_EOL;
 	}
-	
 
-	/**
-	 * ################################################################################
-	 * PROTECTED METHODS
-	 * ################################################################################
-	 */
-	
-	/**
-	 * Returns a list of migrations in the database. These have already been executed.
-	 * 
-	 * @retval array The list of migrations.
-	 */
+
+
 	protected function buildMigrationsInDb() {
 		$pdo = $this->getPdo();
-		
-		$sql = "SELECT change_id, version, script, setUp, tearDown
-			FROM {$this->changeLogTable}
-			ORDER BY version ASC";
+
+		$sql = "SELECT change_id, timestamp, script, set_up, tear_down FROM {$this->changeLogTable} ORDER BY timestamp ASC";
 		$migrations = $pdo->query($sql)
 			->fetchAll(PDO::FETCH_ASSOC);
-		
+
 		if ( is_array($migrations) ) {
 			foreach ( $migrations as $migration ) {
 				$this->migrationsInDb[] = $migration;
 			}
 		}
-		
+
 		return $this->migrationsInDb;
 	}
-	
-	/**
-	 * Returns a list of migrations on the disk. These have yet to be executed.
-	 * 
-	 * @retval array The list of migrations.
-	 */
+
 	protected function buildMigrationsOnDisk() {
 		$migrationPath = $this->getMigrationPath();
-	
+
 		$migrations = glob($migrationPath . "*.{$this->ext}");
-		if ( is_array($migrations) ) {
-			foreach ( $migrations as $migration ) {
+		if (is_array($migrations)) {
+			foreach ($migrations as $migration) {
 				$migrationFile = trim(basename($migration));
-				$version = (int)current(explode('-', $migrationFile));
-				
-				$this->migrationsOnDisk[$version] = array(
+				$timestamp = current(explode('-', $migrationFile));
+
+				$this->migrationsOnDisk[$timestamp] = array(
 					'change_id' => 0,
-					'version' => $version,
+					'timestamp' => $timestamp,
 					'script' => $migrationFile,
-					'setUp' => NULL,
-					'tearDown' => NULL
+					'set_up' => NULL,
+					'tear_down' => NULL
 				);
-				
 			}
 		}
-		
+
 		ksort($this->migrationsOnDisk);
-		
+
 		return $this->migrationsOnDisk;
 	}
-	
-	/**
-	 * Determines the current/latest version installed in the database.
-	 * 
-	 * @retval int The current version.
-	 */
-	protected function determineCurrentVersion() {
+
+	protected function determineLatestTimestamp() {
 		$pdo = $this->getPdo();
 
-		$currentVersion = $pdo->query("SELECT MAX(version) AS current_version FROM {$this->changeLogTable}")
+		$latestTimestamp = $pdo->query("SELECT MAX(timestamp) AS latest_timestamp FROM {$this->changeLogTable}")
 			->fetchColumn(0);
 
-		$this->currentVersion = intval($currentVersion);
-		
-		return $this->currentVersion;
+		$this->latestTimestamp = $latestTimestamp;
+
+		return $this->latestTimestamp;
 	}
-	
-	/**
-	 * Scrubs a script file name to a sanitized migration script name. Included the version number.
-	 * 
-	 * @retval string The full path to the script.
-	 */
-	protected function buildMigrationScriptFileName($version, $scriptName) {
+
+	protected function buildMigrationScriptFileName($timestamp, $scriptName) {
 		$migrationPath = $this->getMigrationPath();
-		
+
 		$scriptName = $this->sanitizeMigrationScriptName($scriptName);
 		$randomString = $this->buildRandomString();
-		
-		$migrationFile = implode('-', array($version, $scriptName, $randomString)) . ".{$this->ext}";
+
+		$migrationFile = implode('-', array($timestamp, $scriptName, $randomString)) . ".{$this->ext}";
 		$migrationFilePath = $migrationPath . $migrationFile;
-		
+
 		return $migrationFilePath;
 	}
-	
-	/**
-	 * Returns kind of a random string.
-	 * 
-	 * @retval string The random string.
-	 */
+
 	protected function buildRandomString() {
 		return substr(sha1((string)microtime(true)), 0, 12);
 	}
-	
-	/**
-	 * Sanitizes a migration script name to replace non alphanumeric, period, and dashes to dashes.
-	 * 
-	 * @retval string The name of the sanitized script name.
-	 */
+
 	protected function sanitizeMigrationScriptName($scriptName) {
 		$scriptName = preg_replace('/[^a-z0-9\-\.]/i', '-', $scriptName);
 		$scriptName = preg_replace('/\-{2,}/', NULL, $scriptName);
 		$scriptName = trim($scriptName);
-		
+
 		return $scriptName;
 	}
-	
-	/**
-	 * Builds the name of the migration class.
-	 * 
-	 * @retval string The name of the class.
-	 */
-	protected function buildMigrationScriptClassName($version, $className) {
+
+	protected function buildMigrationScriptClassName($timestamp, $className) {
 		$cleanClassName = $this->sanitizeClassName($className);
-		$className = "{$this->classPrefix}_{$version}_{$cleanClassName}";
-		
+		$className = "{$this->classPrefix}_{$timestamp}_{$cleanClassName}";
+
 		return $className;
 	}
-	
-	/**
-	 * Ensures the class name is valid.
-	 * 
-	 * @retval string The class name.
-	 */
+
 	protected function sanitizeClassName($className) {
 		$className = str_replace('-', ' ', $className);
 		$className = ucwords($className);
 		$className = str_replace(' ', '_', $className);
-		
+
 		return $className;
 	}
-	
-	
-	/**
-	 * ##################################################
-	 * PRIVATE METHODS
-	 * ##################################################
-	 */
-	
-	/**
-	 * Executes the method to build the changelog table.
-	 * 
-	 * @retval DbMigrator Returns this for chaining.
-	 */
+
+
+
 	private function buildChangelogTable() {
 		$method = __FUNCTION__ . $this->dbType;
 		if ( method_exists($this, $method) ) {
@@ -509,39 +393,42 @@ class DbMigrator {
 		}
 		return $this;
 	}
-	
-	/**
-	 * Builds the changelog table for MySQL.
-	 * 
-	 * @retval bool Returns true.
-	 */
+
 	private function buildChangelogTableMYSQL() {
 		$pdo = $this->getPdo();
-		
+
 		$tableList = $pdo->query('SHOW TABLES')
 			->fetchAll(PDO::FETCH_ASSOC);
 		$installTable = true;
-		
+
 		foreach ( $tableList as $table ) {
 			$tableName = current($table);
 			if ( $tableName == $this->changeLogTable ) {
 				$installTable = false;
 			}
 		}
-		
+
 		if ( $installTable ) {
 			$tableSql = "CREATE TABLE {$this->changeLogTable} (
 					change_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
 					created DATETIME NOT NULL,
-					version INT NOT NULL DEFAULT 0,
+					timestamp VARCHAR(16) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
 					script VARCHAR(255) CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
-					setUp TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
-					tearDown TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL
+					set_up TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL,
+					tear_down TEXT CHARACTER SET utf8 COLLATE utf8_unicode_ci NOT NULL
 				) ENGINE = MYISAM CHARACTER SET utf8 COLLATE utf8_unicode_ci;";
 			$pdo->exec($tableSql);
 		}
-		
+
 		return true;
 	}
-	
+
+	private function buildChangelogTablePOSTGRES() {
+		throw new \Exception(__CLASS__ . '::' . __FUNCTION__ . ' not yet implemented.');
+	}
+
+	private function buildChangelogTableSQLITE() {
+		throw new \Exception(__CLASS__ . '::' . __FUNCTION__ . ' not yet implemented.');
+	}
+
 }
