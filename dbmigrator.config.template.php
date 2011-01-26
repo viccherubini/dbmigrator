@@ -8,4 +8,7 @@ define('DB_NAME', '');
 define('DB_USER', '');
 define('DB_PASSWORD', '');
 
-define('MIGRATION_PATH', '');
+// Only change this if you know what you're doing
+$path = dirname(__FILE__);
+$migration_path = realpath($path . '/sql/');
+define('MIGRATION_PATH', $migration_path);

@@ -2,7 +2,7 @@
 
 declare(encoding='UTF-8');
 
-class DbMigrator {
+class dbmigrator {
 
 	private $latest_timestamp = -1;
 
@@ -18,8 +18,8 @@ class DbMigrator {
 	private $db_type = 'MYSQL';
 	private $ext = 'php';
 
-	private $set_up_method = 'setUp';
-	private $tear_down_method = 'tearDown';
+	private $set_up_method = 'set_up';
+	private $tear_down_method = 'tear_down';
 
 	const MESSAGE_SUCCESS = 'success';
 	const MESSAGE_ERROR = 'error';
@@ -42,10 +42,10 @@ class DbMigrator {
 	}
 
 	public function create($script_name) {
-		$timestamp = $this->get_utc_time();
+		$utc_timestamp = $this->get_utc_time();
 
-		$migration_file_path = $this->build_migration_script_name($timestamp, $script_name);
-		$migration_class_name = $this->build_migration_script_class($timestamp, $script_name);
+		$migration_file_path = $this->build_migration_script_name($utc_timestamp, $script_name);
+		$migration_class_name = $this->build_migration_script_class($utc_timestamp, $script_name);
 
 		$tear_down_code = NULL;
 		if (0 === stripos($script_name, self::SQL_CREATE_TABLE)) {
@@ -66,9 +66,9 @@ class DbMigrator {
 			fwrite($fh, "<?php" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "// This file was automatically generated, ADD YOUR QUERIES BELOW." . PHP_EOL);
 			fwrite($fh, "// CREATION DATE: {$now}" . PHP_EOL . PHP_EOL);
-			fwrite($fh, "\$__migration_object = new {$class_name};" . PHP_EOL . PHP_EOL);
-			fwrite($fh, "class {$class_name} {" . PHP_EOL . PHP_EOL);
-			fwrite($fh, "\tpublic \$timestamp = '{$timestamp}';" . PHP_EOL . PHP_EOL);
+			fwrite($fh, "\$__migration_object = new {$migration_class_name};" . PHP_EOL . PHP_EOL);
+			fwrite($fh, "class {$migration_class_name} {" . PHP_EOL . PHP_EOL);
+			fwrite($fh, "\tpublic \$utc_timestamp = '{$utc_timestamp}';" . PHP_EOL . PHP_EOL);
 			fwrite($fh, "\tpublic function {$this->set_up_method}() {" . PHP_EOL);
 			fwrite($fh, "\t\treturn \"\";" . PHP_EOL);
 			fwrite($fh, "\t}" . PHP_EOL . PHP_EOL);
@@ -94,9 +94,9 @@ class DbMigrator {
 		if (is_array($snapshots)) {
 			foreach ($snapshots as $snapshot) {
 				$snapshotFile = trim(basename($snapshot));
-				$timestamp = current(explode('-', $snapshotFile));
+				$utc_timestamp = current(explode('-', $snapshotFile));
 
-				$snapshotsOnDisk[$timestamp] = $snapshotFile;
+				$snapshotsOnDisk[$utc_timestamp] = $snapshotFile;
 			}
 		}
 
@@ -107,148 +107,62 @@ class DbMigrator {
 		}
 	}*/
 
-	public function update($timestamp=-1) {
+	public function update($utc_timestamp=-1) {
 		$this->build_change_log_table();
 		$pdo = $this->get_pdo();
 
-		$migrations_on_disk = $this->build_migrations_on_disk();
-		$migrations_in_db = $this->build_migrations_in_db();
-		$migration_path = $this->get_migration_path();
 		$latest_timestamp = $this->find_latest_timestamp();
-
-		$migration_method = NULL;
-		$migration_scripts = array();
-
-		if (-1 == $timestamp) {
-			$timestamp = $this->get_utc_time();
+		if (-1 == $utc_timestamp) {
+			$utc_timestamp = $this->get_utc_time();
 		}
 
-		$migrations_on_disk_count = count($migrations_on_disk);
-		$migrations_in_db_count = count($migrations_in_db);
-
-		if ($timestamp <= $latest_timestamp) {
-			//$this->message("ROLLING BACK TO TIMESTAMP {$timestamp}");
-
-			// PHP5.3 Goodness
-			$migration_scripts = array_filter($migrations_in_db, function($m) use ($timestamp, $latest_timestamp) {
-				return ($m['timestamp'] > $latest_timestamp && $m['timestamp'] <= $latest_timestamp);
-			});
-
-			// Need to execute the scripts in reverse order
-			krsort($migration_scripts);
-			$migration_method = $this->tear_down_method;
-		} elseif ($timestamp > $latest_timestamp) {
-			//$this->message("UPDATING TO TIMESTAMP {$timestamp}");
-
-			// PHP5.3 Goodness
-			$migration_scripts = array_filter($migrations_on_disk, function($m) use ($timestamp, $latest_timestamp) {
-				return ($m['timestamp'] <= $timestamp && $m['timestamp'] > $latest_timestamp);
-			});
-
-			$migration_method = $this->set_up_method;
-		} else {
-			$this->message("You are already at the latest version of the database.");
+		if ($utc_timestamp < $latest_timestamp) {
 			return false;
 		}
 
+		$migrations_on_disk = $this->build_migrations_on_disk();
+		$migration_path = $this->get_migration_path();
 
-print_r($migration_scripts);
+		$migration_scripts = array();
+		$migration_scripts = array_filter($migrations_on_disk, function($m) use ($utc_timestamp, $latest_timestamp) {
+			return ($m['timestamp'] <= $utc_timestamp && $m['timestamp'] > $latest_timestamp);
+		});
 
-		$error = false;
-		$start_time = microtime(true);
-		$execution_time = 0;
-
-		if (false) {
-		foreach ($migrationScriptList as $migration) {
-			$migrationFile = $migration['script'];
-			$migrationFilePath = $migration_path . $migrationFile;
-
-			$query = NULL;
-			if (is_file($migrationFilePath)) {
-				require_once($migrationFilePath);
-
-				if (is_object($__migration_object) && method_exists($__migration_object, $migration_method)) {
-					$migrationClass = get_class($__migration_object);
-					$query = $__migration_object->$migration_method();
-				}
-			} else {
-				$query = $migration[$migration_method];
-			}
-
-			$executed = false;
-			if (!empty($query)) {
-				$pdoStatement = $pdo->query($query);
-				if (false !== $pdoStatement) {
-					$executed = true;
-					$pdoStatement->closeCursor();
-				}
-			}
-
-			if (false === $executed) {
-				$errorInfo = $pdo->errorInfo();
-
-				$this->error("##################################################");
-				$this->error("FAILED TO EXECUTE: {$migrationFile}");
-				if ( is_array($errorInfo) && count($errorInfo) > 2 ){
-					$this->error("ERROR: {$errorInfo[2]}");
-				} else {
-					$this->error("ERROR: Empty query");
-				}
-				$this->error("##################################################");
-
-				$error = true;
-				break;
-			} else {
-				$this->success(sprintf("%01.3fs - %-10s", $execTime, $migrationFile));
-			}
-
-			if ($migration['change_id'] > 0) {
-				$pdo->prepare("DELETE FROM {$this->change_log_table} WHERE change_id = ?")
-					->execute(array($migration['change_id']));
-			} else {
-				$setUpQuery = NULL;
-				$tearDownQuery = NULL;
-
-				if ( method_exists($__migration_object, $this->set_up_method) ) {
-					$setUpQuery = $__migration_object->{$this->set_up_method}();
-				}
-
-				if ( method_exists($__migration_object, $this->tear_down_method) ) {
-					$tearDownQuery = $__migration_object->{$this->tear_down_method}();
-				}
-
-				$pdo->prepare("INSERT INTO {$this->change_log_table} VALUES(NULL, NOW(), ?, ?, ?, ?)")
-					->execute(array($__migration_object->timestamp, $migrationFile, $setUpQuery, $tearDownQuery));
-			}
-
-			$execTime = microtime(true);
-			$execTime -= $startTime;
-		}
-
-		$pdo->query("OPTIMIZE TABLE {$this->change_log_table}");
-
-		if ( $error ) {
-			$this->error("FAILURE! DbMigrator COULD NOT UPDATE TO THE LATEST VERSION OF THE DATABASE!");
-		} else {
-			$this->success("Successfully migrated the database to timestamp {$timestamp}.");
-			$this->success(sprintf("Migration took %01.3f seconds.", $execTime));
-		}
-		}
-
-		return (!$error);
+		$migrations_executed_successfully = $this->execute_migration_scripts($migration_scripts, $this->set_up_method);
+		return $migrations_executed_successfully;
 	}
 
-	public function rollback($timestamp) {
+	public function rollback($utc_timestamp=0) {
+		$this->build_change_log_table();
+		$pdo = $this->get_pdo();
 
+		// Find the latest timestamp and if it's less than the utc_timestamp
+		// we're rolling back to, just return false
+		$latest_timestamp = $this->find_latest_timestamp();
+		if ($utc_timestamp > $latest_timestamp) {
+			return false;
+		}
 
+		$migrations_in_db = $this->build_migrations_in_db();
+		$migration_path = $this->get_migration_path();
+
+		$migration_scripts = array();
+		$migration_scripts = array_filter($migrations_in_db, function($m) use ($utc_timestamp, $latest_timestamp) {
+			return ($m['timestamp'] > $utc_timestamp && $m['timestamp'] <= $latest_timestamp);
+		});
+
+		// Need to execute the scripts in reverse order
+		krsort($migration_scripts);
+
+		$migrations_executed_successfully = $this->execute_migration_scripts($migration_scripts, $this->tear_down_method);
+		return $migrations_executed_successfully;
 	}
 
-	public function setmigration_path($migration_path) {
-		$pathLength = strlen($migration_path);
-		if ($pathLength > 0 && $migration_path[$pathLength-1] != DIRECTORY_SEPARATOR) {
+	public function set_migration_path($migration_path) {
+		$path_length = strlen($migration_path);
+		if ($path_length > 0 && $migration_path[$path_length-1] != DIRECTORY_SEPARATOR) {
 			$migration_path .= DIRECTORY_SEPARATOR;
 		}
-
 		$this->migration_path = $migration_path;
 		return $this;
 	}
@@ -257,19 +171,19 @@ print_r($migration_scripts);
 		return $this->currentVersion;
 	}
 
-	public function getmessages() {
+	public function get_messages() {
 		return $this->messages;
 	}
 
-	public function getmigrations_in_db() {
+	public function get_migrations_in_db() {
 		return $this->migrations_in_db;
 	}
 
-	public function getmigrations_on_disk() {
+	public function get_migrations_on_disk() {
 		return $this->migrations_on_disk;
 	}
 
-	public function getmigration_path() {
+	public function get_migration_path() {
 		return $this->migration_path;
 	}
 
@@ -296,15 +210,107 @@ print_r($migration_scripts);
 
 
 
-	protected function buildmigrations_in_db() {
+
+
+
+
+
+
+
+
+	private function execute_migration_scripts($migration_scripts, $migration_method) {
 		$pdo = $this->get_pdo();
 
-		$sql = "SELECT change_id, timestamp, script, set_up, tear_down FROM {$this->change_log_table} ORDER BY timestamp ASC";
-		$migrations = $pdo->query($sql)
+		$migration_scripts_run_successfully = true;
+		if (0 === count($migration_scripts)) {
+			return $migration_scripts_run_successfully;
+		}
+
+		$migration_path = $this->get_migration_path();
+		foreach ($migration_scripts as $migration) {
+			$migration_file = $migration['script'];
+			$migration_file_path = $migration_path . $migration_file;
+
+			$query = NULL;
+			if (is_file($migration_file_path)) {
+				require_once($migration_file_path);
+
+				if (isset($__migration_object) && is_object($__migration_object) && method_exists($__migration_object, $migration_method)) {
+					$migration_script_class = get_class($__migration_object);
+					$query = $__migration_object->$migration_method();
+				}
+			}
+
+			$executed = false;
+			if (!empty($query)) {
+				$statement = $pdo->query($query);
+				if (false !== $statement) {
+					$executed = true;
+					$statement->closeCursor();
+				}
+			}
+
+			if (false === $executed) {
+				$migration_scripts_run_successfully = false;
+				break;
+			}
+
+			if ($migration['change_id'] > 0) {
+				$statement = $pdo->prepare("DELETE FROM ".$this->change_log_table." WHERE change_id = :change_id");
+				$statement->bindValue(':change_id', $migration['change_id'], \PDO::PARAM_INT);
+				$statement->execute();
+			} else {
+				$set_up_query = NULL;
+				$tear_down_query = NULL;
+
+				if (method_exists($__migration_object, $this->set_up_method)) {
+					$set_up_query = $__migration_object->{$this->set_up_method}();
+				}
+
+				if (method_exists($__migration_object, $this->tear_down_method)) {
+					$tear_down_query = $__migration_object->{$this->tear_down_method}();
+				}
+
+				$statement = $pdo->prepare("INSERT INTO ".$this->change_log_table."(created, timestamp, script, set_up, tear_down) VALUES(NOW(), :timestamp, :migration_file, :set_up_query, :tear_down_query)");
+				$statement->bindValue(':timestamp', $__migration_object->utc_timestamp, \PDO::PARAM_STR);
+				$statement->bindValue(':migration_file', $migration_file, \PDO::PARAM_STR);
+				$statement->bindValue(':set_up_query', $set_up_query, \PDO::PARAM_STR);
+				$statement->bindValue(':tear_down_query', $tear_down_query, \PDO::PARAM_STR);
+				$statement->execute();
+			}
+
+			// Reset to NULL so the last script doesn't get run on successive tries
+			// if the object is invalid.
+			$__migration_object = NULL;
+		}
+
+		$pdo->query("OPTIMIZE TABLE ".$this->change_log_table);
+		return $migration_scripts_run_successfully;
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	protected function build_migrations_in_db() {
+		$pdo = $this->get_pdo();
+
+		$migrations = $pdo->query("SELECT change_id, timestamp, script, set_up, tear_down FROM ".$this->change_log_table." ORDER BY timestamp ASC")
 			->fetchAll(PDO::FETCH_ASSOC);
 
-		if ( is_array($migrations) ) {
-			foreach ( $migrations as $migration ) {
+		if (is_array($migrations)) {
+			foreach ($migrations as $migration) {
 				$this->migrations_in_db[] = $migration;
 			}
 		}
@@ -312,19 +318,19 @@ print_r($migration_scripts);
 		return $this->migrations_in_db;
 	}
 
-	protected function buildmigrations_on_disk() {
-		$migration_path = $this->getmigration_path();
+	protected function build_migrations_on_disk() {
+		$migration_path = $this->get_migration_path();
 
-		$migrations = glob($migration_path . "*.{$this->ext}");
+		$migrations = glob($migration_path.'*'.$this->ext);
 		if (is_array($migrations)) {
 			foreach ($migrations as $migration) {
-				$migrationFile = trim(basename($migration));
-				$timestamp = current(explode('-', $migrationFile));
+				$migration_file = trim(basename($migration));
+				$utc_timestamp = current(explode('-', $migration_file));
 
-				$this->migrations_on_disk[$timestamp] = array(
+				$this->migrations_on_disk[$utc_timestamp] = array(
 					'change_id' => 0,
-					'timestamp' => $timestamp,
-					'script' => $migrationFile,
+					'timestamp' => $utc_timestamp,
+					'script' => $migration_file,
 					'set_up' => NULL,
 					'tear_down' => NULL
 				);
@@ -332,7 +338,6 @@ print_r($migration_scripts);
 		}
 
 		ksort($this->migrations_on_disk);
-
 		return $this->migrations_on_disk;
 	}
 
@@ -347,7 +352,7 @@ print_r($migration_scripts);
 		$migration_path = $this->get_migration_path();
 		$script_name = $this->sanitize_migration_script_name($script_name);
 
-		$migration_file = implode('-', array($timestamp, $script_name)).'.'.$this->ext;
+		$migration_file = implode('-', array($utc_timestamp, $script_name)).'.'.$this->ext;
 		$migration_file_path = $migration_path . $migration_file;
 
 		return $migration_file_path;
@@ -361,9 +366,9 @@ print_r($migration_scripts);
 		return $script_name;
 	}
 
-	protected function build_migration_script_class($timestamp, $class_name) {
+	protected function build_migration_script_class($utc_timestamp, $class_name) {
 		$class_name = $this->sanitize_class_name($class_name);
-		$class_name = implode('_', array($this->class_prefix, $timestamp, $class_name));
+		$class_name = implode('_', array($this->class_prefix, $utc_timestamp, $class_name));
 		return $class_name;
 	}
 
@@ -380,7 +385,7 @@ print_r($migration_scripts);
 
 	private function get_utc_time() {
 		$utc_timestamp = (time() + (-1 * (int)date('Z')));
-		$utc_time = date('YmdHisu', $utc_timestamp);
+		$utc_time = date('YmdHis', $utc_timestamp);
 
 		return $utc_time;
 	}
