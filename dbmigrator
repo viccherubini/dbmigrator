@@ -2,14 +2,13 @@
 <?php
 
 declare(encoding='UTF-8');
-
 require_once('DbMigrator/DbMigrator.php');
 
 $cwd = getcwd();
-$localConfig = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'DbMigrator.Config.php'));
+$local_config = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigration.config.php'));
 
-if (is_file($localConfig)) {
-	require_once($localConfig);
+if (is_file($local_config)) {
+	require_once($local_config);
 } else {
 	require_once('DbMigrator/DbMigrator.Config.php');
 }
