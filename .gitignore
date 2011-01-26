@@ -1,2 +1,3 @@
 dbmigrator.config.php
-sql
+sql/*.php
+sql/snapshots
