@@ -13,27 +13,11 @@ if (is_file($local_config)) {
 	require_once('dbmigrator/dbmigrator.config.php');
 }
 
-$dbmigrator = new dbmigrator(DB_TYPE);
-$dbmigrator->set_migration_path(MIGRATION_PATH);
+$dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
 
-if (1 == $argc) {
-	echo("Please enter at least one argument.");
-	exit(1);
-}
 
-try {
-	$db_type = strtolower(DB_TYPE);
 
-	$pdo = new PDO($db_type.':host='.DB_HOST.';dbname='.DB_NAME, DB_USER, DB_PASSWORD);
-	if ('mysql' === $db_type) {
-		$pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, 1);
-	}
 
-	$dbmigrator->attach_pdo($pdo);
-} catch (PDOException $e) {
-	echo("Failed to connect to the database with specified credentials. Actions 'rollback' and 'update' are unavailable, 'create' is available.");
-	exit(1);
-}
 
 $action = strtolower($argv[1]);
 switch ($action) {
@@ -45,10 +29,15 @@ switch ($action) {
 			$scripts = array_slice($argv, 2);
 			$scripts_count = count($scripts);
 
-			for ($i=0; $i<$scripts_count; $i++) {
+			$x = 1;
+			for ($i=0; $i<$scripts_count; ++$i) {
 				$script_name = $dbmigrator->create($scripts[$i]);
 				echo("Successfully created ".$script_name.PHP_EOL);
-				sleep(2);
+				
+				if ($x !== $scripts_count) {
+					sleep(2);
+				}
+				$x++;
 			}
 		}
 		break;
@@ -56,11 +45,14 @@ switch ($action) {
 
 	case 'snapshot': {
 		if ($argc != 3) {
-			$dbmigrator->error("Specify a snapshot name.");
+			echo("Specify snapshot name");
+			exit(1);
 		} else {
 			$snapshot = $argv[2];
-			$dbmigrator->createSnapshot($snapshot);
+			$dbmigrator->snapshot($snapshot);
 		}
+
+		break;
 	}
 
 	case 'update': {
