@@ -49,12 +49,6 @@ class dbmigrator {
 			->build_snapshots_on_disk()
 			->build_snapshot_migrations_on_disk()
 			->build_change_log_table();
-
-		//print_r($this->migrations_in_db);
-		//print_r($this->migrations_on_disk);
-		//print_r($this->snapshots_on_disk);
-		//print_r($this->snapshot_migrations_on_disk);
-		//exit;
 	}
 
 	public function __destruct() {
