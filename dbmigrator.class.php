@@ -44,11 +44,11 @@ class dbmigrator {
 
 		$this->attach_pdo($pdo)
 			->set_object_path($object_path)
+			->build_change_log_table()
 			->build_migrations_in_db()
 			->build_migrations_on_disk()
 			->build_snapshots_on_disk()
-			->build_snapshot_migrations_on_disk()
-			->build_change_log_table();
+			->build_snapshot_migrations_on_disk();
 	}
 
 	public function __destruct() {
