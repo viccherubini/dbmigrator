@@ -184,8 +184,8 @@ class dbmigrator {
 		$migrations_on_disk = $this->get_migrations_on_disk();
 
 		$migration_scripts = array();
-		$migration_scripts = array_filter($migrations_on_disk, function($m) use ($utc_timestamp, $latest_timestamp) {
-			return ($m['timestamp'] <= $utc_timestamp && $m['timestamp'] >= $latest_timestamp);
+		$migration_scripts = array_filter($migrations_on_disk, function($mig) use ($utc_timestamp, $latest_timestamp) {
+			return ($mig['timestamp'] <= $utc_timestamp && $mig['timestamp'] > $latest_timestamp);
 		});
 
 		$migrations_executed_successfully = $this->execute_migration_scripts($migration_scripts, $this->set_up_method);

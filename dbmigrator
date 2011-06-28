@@ -2,28 +2,39 @@
 <?php
 
 declare(encoding='UTF-8');
-require_once('dbmigrator/dbmigrator.class.php');
+require_once(__DIR__.'/dbmigrator.class.php');
 
 $cwd = getcwd();
-$local_config = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigrator.config.php'));
+$project_config = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigrator.config.php'));
+$local_config = __DIR__.'/dbmigrator.config.php';
 
-if (is_file($local_config)) {
-	require_once($local_config);
-} else {
-	require_once('dbmigrator/dbmigrator.config.php');
+$configuration_file = $project_config;
+if (!is_file($project_config)) {
+	$configuration_file = null;
+	
+	if (is_file($local_config)) {
+		$configuration_file = $local_config;
+	}
 }
+
+if (empty($configuration_file)) {
+	echo("A valid dbmigrator.config.php could not be found in the project path or the local path. Giving up.".PHP_EOL.PHP_EOL);
+	exit(1);
+}
+
+require_once($configuration_file);
 
 $dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
 
+$action = 'default';
+if (isset($argv[1])) {
+	$action = strtolower($argv[1]);
+}
 
-
-
-
-$action = strtolower($argv[1]);
 switch ($action) {
 	case 'create': {
 		if ($argc < 2) {
-			echo("Enter the name of at least one script to create.");
+			echo("Enter the name of at least one script to create.".PHP_EOL.PHP_EOL);
 			exit(1);
 		} else {
 			$scripts = array_slice($argv, 2);
@@ -35,18 +46,24 @@ switch ($action) {
 				echo("Successfully created ".$script_name.PHP_EOL);
 				
 				if ($x !== $scripts_count) {
-					sleep(2);
+					sleep(1);
 				}
 				$x++;
 			}
+			echo(PHP_EOL);
 		}
 		break;
 	}
 
 	case 'snapshot': {
 		if ($argc != 3) {
-			echo("Specify snapshot name");
-			exit(1);
+			$snapshots_on_disk = $dbmigrator->get_snapshots_on_disk();
+			echo("Current snapshots:".PHP_EOL);
+			
+			foreach ($snapshots_on_disk as $snap) {
+				$mig_count = count($snap['migrations']);
+				echo($snap['snapshot'].' ('.$mig_count.' migrations)'.PHP_EOL);
+			}
 		} else {
 			$snapshot = $argv[2];
 			$dbmigrator->snapshot($snapshot);
@@ -76,7 +93,7 @@ switch ($action) {
 	}
 
 	case 'default': {
-		echo("Usage: dbmigrator [create,snapshot,update,rollback] [<script-name>,<snapshot-name>,[<timestamp>,<snapshot>],[<timestamp>,<snapshot>]]");
+		echo("Usage: dbmigrator [create,snapshot,update,rollback] [<script-name>,<snapshot-name>,[<timestamp>,<snapshot>],[<timestamp>,<snapshot>]]".PHP_EOL.PHP_EOL);
 		exit(1);
 		break;
 	}
