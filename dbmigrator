@@ -37,7 +37,7 @@ switch ($action) {
 				message("Successfully created migration script {$script_name}");
 				
 				if ($x !== $scripts_count) {
-					sleep(1);
+					sleep(2);
 				}
 				$x++;
 			}
