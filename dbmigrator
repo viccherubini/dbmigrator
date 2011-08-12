@@ -2,23 +2,14 @@
 <?php
 
 declare(encoding='UTF-8');
-require_once(__DIR__.'/dbmigrator.class.php');
+require_once(__DIR__.'/lib/dbmigrator.class.php');
+require_once(__DIR__.'/lib/dbmigrator.methods.php');
 
 $cwd = getcwd();
-$project_config = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigrator.config.php'));
-$local_config = __DIR__.'/dbmigrator.config.php';
-
-$configuration_file = $project_config;
-if (!is_file($project_config)) {
-	$configuration_file = null;
-	
-	if (is_file($local_config)) {
-		$configuration_file = $local_config;
-	}
-}
+$configuration_file = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigrator.config.php'));
 
 if (empty($configuration_file)) {
-	echo("A valid dbmigrator.config.php could not be found in the project path or the local path. Giving up.".PHP_EOL.PHP_EOL);
+	error("A valid dbmigrator.config.php could not be found in the project path. Giving up.");
 	exit(1);
 }
 
@@ -34,7 +25,7 @@ if (isset($argv[1])) {
 switch ($action) {
 	case 'create': {
 		if ($argc < 2) {
-			echo("Enter the name of at least one script to create.".PHP_EOL.PHP_EOL);
+			error("Enter the name of at least one script to create.");
 			exit(1);
 		} else {
 			$scripts = array_slice($argv, 2);
@@ -43,7 +34,7 @@ switch ($action) {
 			$x = 1;
 			for ($i=0; $i<$scripts_count; ++$i) {
 				$script_name = $dbmigrator->create($scripts[$i]);
-				echo("Successfully created ".$script_name.PHP_EOL);
+				message("Successfully created migration script {$script_name}");
 				
 				if ($x !== $scripts_count) {
 					sleep(1);
@@ -58,15 +49,15 @@ switch ($action) {
 	case 'snapshot': {
 		if ($argc != 3) {
 			$snapshots_on_disk = $dbmigrator->get_snapshots_on_disk();
-			echo("Current snapshots:".PHP_EOL);
+			message("Current snapshots:".PHP_EOL);
 			
 			foreach ($snapshots_on_disk as $snap) {
 				$mig_count = count($snap['migrations']);
 				echo($snap['snapshot'].' ('.$mig_count.' migrations)'.PHP_EOL);
 			}
 		} else {
-			$snapshot = $argv[2];
-			$dbmigrator->snapshot($snapshot);
+			$dbmigrator->snapshot($argv[2]);
+			success("Successfully created snapshot {$argv[2]}.");
 		}
 
 		break;
@@ -78,7 +69,12 @@ switch ($action) {
 			$utc_timestamp = trim($argv[2]);
 		}
 
-		$dbmigrator->update($utc_timestamp);
+		if ($dbmigrator->update($utc_timestamp)) {
+			success("Successfully updated to latest migration script.");
+		} else {
+			error("Failed to upgrade to latest migration.");
+		}
+		
 		break;
 	}
 
@@ -88,7 +84,12 @@ switch ($action) {
 			$utc_timestamp = trim($argv[2]);
 		}
 
-		$dbmigrator->rollback($utc_timestamp);
+		if ($dbmigrator->rollback($utc_timestamp)) {
+			success("Successfully rolled back to latest migration script.");
+		} else {
+			error("Failed to roll back to earliest migration.");
+		}
+		
 		break;
 	}
 

@@ -1,6 +1,16 @@
-<?php
+<?php declare(encoding='UTF-8');
 
-declare(encoding='UTF-8');
+// Copy this file to the root of where you will place all of your migration scripts.
+// For example, if your project looks like this:
+
+// /path/to/project/
+//   build/
+//     sql/
+//   webroot/
+
+// And you wanted the sql directory to contain your scripts and snapshots, this file would be
+// placed in the build directory.
+
 
 define('DB_TYPE', 'mysql');
 define('DB_HOST', '');

@@ -1,0 +1,1 @@
+CREATE TABLE _schema_changelog (id serial NOT NULL, created timestamp without time zone NOT NULL, script_timestamp character varying NOT NULL, script character varying, set_up text NOT NULL, tear_down text NOT NULL, CONSTRAINT id PRIMARY KEY (id)) WITH (OIDS=FALSE);
