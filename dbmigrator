@@ -3,7 +3,6 @@
 
 declare(encoding='UTF-8');
 require_once(__DIR__.'/lib/dbmigrator.class.php');
-require_once(__DIR__.'/lib/dbmigrator.methods.php');
 
 $cwd = getcwd();
 $configuration_file = implode(DIRECTORY_SEPARATOR, array($cwd, 'build', 'dbmigrator.config.php'));

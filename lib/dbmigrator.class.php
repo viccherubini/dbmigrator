@@ -1,5 +1,7 @@
 <?php declare(encoding='UTF-8');
 
+require_once(__DIR__.'/dbmigrator.methods.php');
+
 class dbmigrator {
 
 	private $latest_timestamp = -1;
@@ -319,6 +321,8 @@ class dbmigrator {
 		foreach ($migration_scripts as $migration) {
 			$migration_file = $migration['script'];
 			$migration_file_path = $object_path.$migration_file;
+			
+			message("Executing migration script {$migration_file}.");
 
 			$query = null;
 			if (is_file($migration_file_path)) {
