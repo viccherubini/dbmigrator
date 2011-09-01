@@ -1,5 +1,4 @@
-<?php declare(encoding='UTF-8');
-
+<?php
 require_once(__DIR__.'/dbmigrator.methods.php');
 
 class dbmigrator {

@@ -1,4 +1,4 @@
-<?php declare(encoding='UTF-8');
+<?php
 
 function error($message) {
 	echo("  ## \033[1;31m{$message}\033[m".PHP_EOL);
