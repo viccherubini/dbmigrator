@@ -38,6 +38,8 @@ class dbmigrator {
 			$pdo->setAttribute(\PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, 1);
 		}
 		
+		$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+		
 		$this->change_log_table_search_scripts = array(
 			'mysql' => file_get_contents(__DIR__.'/../sql/mysql.show_tables.sql'),
 			'pgsql' => file_get_contents(__DIR__.'/../sql/pgsql.show_tables.sql')
@@ -333,15 +335,7 @@ class dbmigrator {
 				}
 			}
 
-			$executed = false;
-			if (!empty($query)) {
-				$statement = $pdo->query($query);
-				if (false !== $statement) {
-					$executed = true;
-					$statement->closeCursor();
-				}
-			}
-
+			$executed = $pdo->exec($query);
 			if (false === $executed) {
 				$migration_scripts_run_successfully = false;
 				break;
