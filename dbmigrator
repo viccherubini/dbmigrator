@@ -11,7 +11,11 @@ if (empty($configuration_file) || !is_file($configuration_file)) {
 
 require_once($configuration_file);
 
-$dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
+try {
+    $dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
+} catch (Exception $e) {
+    error("dbmigrator failed to connect to the database.", 1);
+}
 
 $action = "default";
 if (isset($argv[1])) {
