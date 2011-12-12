@@ -33,12 +33,12 @@ class dbmigrator {
 		$this->db_type = strtolower(DB_TYPE);
 		$dsn = $this->db_type.':host='.$db_host.';dbname='.$db_name.';user='.$db_user.';password='.$db_password;
 		
-		$pdo = new \PDO($dsn, $db_user, $db_password);
+		$pdo = new PDO($dsn, $db_user, $db_password);
 		if ('mysql' === $db_type) {
-			$pdo->setAttribute(\PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, 1);
+			$pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, 1);
 		}
 		
-		$pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+		$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 		
 		$this->change_log_table_search_scripts = array(
 			'mysql' => file_get_contents(__DIR__.'/../sql/mysql.show_tables.sql'),
@@ -65,7 +65,7 @@ class dbmigrator {
 
 
 
-	public function attach_pdo(\PDO $pdo) {
+	public function attach_pdo(PDO $pdo) {
 		$this->pdo = $pdo;
 		return $this;
 	}
@@ -335,39 +335,43 @@ class dbmigrator {
 				}
 			}
 
-			$executed = $pdo->exec($query);
-			if (false === $executed) {
+			try {
+				$executed = $pdo->exec($query);
+				if (false === $executed) {
+					$migration_scripts_run_successfully = false;
+					break;
+				}
+		
+				if ($migration['id'] > 0) {
+					$statement = $pdo->prepare("DELETE FROM _schema_changelog WHERE id = :id");
+					$statement->bindValue('id', $migration['id'], PDO::PARAM_INT);
+					$statement->execute();
+				} else {
+					$set_up_query = null;
+					$tear_down_query = null;
+
+					if (method_exists($__migration_object, $this->set_up_method)) {
+						$set_up_query = $__migration_object->{$this->set_up_method}();
+					}
+
+					if (method_exists($__migration_object, $this->tear_down_method)) {
+						$tear_down_query = $__migration_object->{$this->tear_down_method}();
+					}
+
+					$statement = $pdo->prepare("INSERT INTO _schema_changelog(created, script_timestamp, script, set_up, tear_down) VALUES(NOW(), :script_timestamp, :migration_file, :set_up_query, :tear_down_query)");
+					$statement->bindValue('script_timestamp', $__migration_object->utc_timestamp, PDO::PARAM_STR);
+					$statement->bindValue('migration_file', $migration_file, PDO::PARAM_STR);
+					$statement->bindValue('set_up_query', $set_up_query, PDO::PARAM_STR);
+					$statement->bindValue('tear_down_query', $tear_down_query, PDO::PARAM_STR);
+					$statement->execute();
+				}
+
+				// Reset to null so the last script doesn't get run on successive tries
+				// if the object is invalid.
+				$__migration_object = null;
+			} catch (Exception $e) {
 				$migration_scripts_run_successfully = false;
-				break;
 			}
-
-			if ($migration['id'] > 0) {
-				$statement = $pdo->prepare("DELETE FROM _schema_changelog WHERE id = :id");
-				$statement->bindValue('id', $migration['id'], \PDO::PARAM_INT);
-				$statement->execute();
-			} else {
-				$set_up_query = null;
-				$tear_down_query = null;
-
-				if (method_exists($__migration_object, $this->set_up_method)) {
-					$set_up_query = $__migration_object->{$this->set_up_method}();
-				}
-
-				if (method_exists($__migration_object, $this->tear_down_method)) {
-					$tear_down_query = $__migration_object->{$this->tear_down_method}();
-				}
-
-				$statement = $pdo->prepare("INSERT INTO _schema_changelog(created, script_timestamp, script, set_up, tear_down) VALUES(NOW(), :script_timestamp, :migration_file, :set_up_query, :tear_down_query)");
-				$statement->bindValue('script_timestamp', $__migration_object->utc_timestamp, \PDO::PARAM_STR);
-				$statement->bindValue('migration_file', $migration_file, \PDO::PARAM_STR);
-				$statement->bindValue('set_up_query', $set_up_query, \PDO::PARAM_STR);
-				$statement->bindValue('tear_down_query', $tear_down_query, \PDO::PARAM_STR);
-				$statement->execute();
-			}
-
-			// Reset to null so the last script doesn't get run on successive tries
-			// if the object is invalid.
-			$__migration_object = null;
 		}
 
 		return $migration_scripts_run_successfully;
