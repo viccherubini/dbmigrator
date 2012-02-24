@@ -10,11 +10,10 @@ if (empty($configuration_file) || !is_file($configuration_file)) {
 }
 
 require_once($configuration_file);
-
 try {
-    $dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
+	$dbmigrator = new dbmigrator(DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, DB_TYPE, OBJECT_PATH);
 } catch (Exception $e) {
-    error("dbmigrator failed to connect to the database.", 1);
+	error("dbmigrator failed to connect to the database.", 1);
 }
 
 $action = "default";
@@ -33,7 +32,11 @@ switch ($action) {
 			$x = 1;
 			for ($i=0; $i<$scripts_count; ++$i) {
 				$script_name = $dbmigrator->create($scripts[$i]);
-				message("Successfully created migration script {$script_name}");
+				if (!$script_name) {
+					error(sprintf("Failed to create migration script %s. You do not have permission to write the script template file.", $scripts[$i]), 1);
+					break;
+				}
+				message(sprintf("Successfully created migration script %s", $script_name));
 				
 				if ($x !== $scripts_count) {
 					sleep(2);
@@ -42,23 +45,6 @@ switch ($action) {
 			}
 			echo(PHP_EOL);
 		}
-		break;
-	}
-
-	case "snapshot": {
-		if ($argc != 3) {
-			$snapshots_on_disk = $dbmigrator->get_snapshots_on_disk();
-			message("Current snapshots:".PHP_EOL);
-			
-			foreach ($snapshots_on_disk as $snap) {
-				$mig_count = count($snap["migrations"]);
-				echo($snap["snapshot"]." (".$mig_count." migrations)".PHP_EOL);
-			}
-		} else {
-			$dbmigrator->snapshot($argv[2]);
-			success("Successfully created snapshot {$argv[2]}.", 0);
-		}
-
 		break;
 	}
 
@@ -93,7 +79,7 @@ switch ($action) {
 	}
 
 	case "default": {
-		message("Usage: dbmigrator [create,snapshot,update,rollback] [<script-name>,<snapshot-name>,[<timestamp>,<snapshot>],[<timestamp>,<snapshot>]]".PHP_EOL);
+		message("Usage: dbmigrator [create,update,rollback] [<script-name>,[<timestamp>],[<timestamp>]]".PHP_EOL);
 		break;
 	}
 }
